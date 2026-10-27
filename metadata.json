@@ -1,0 +1,6 @@
+{
+  "name": "AutoDoc Suite - ระบบออกเอกสารอัตโนมัติ",
+  "description": "ระบบออกเอกสารอัตโนมัติ ใบเสร็จรับเงิน (RC), ใบเสนอราคา (QT), ใบแจ้งหนี้ (IN), และใบยืนยันการจองห้องพัก (CF) พร้อมเชื่อมต่อ Google Sheets และ Google Drive",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
