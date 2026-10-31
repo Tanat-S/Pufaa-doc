@@ -3,18 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { CompanySettings, DocType, DocumentData } from './types/document';
 import { DEFAULT_SETTINGS, INITIAL_DOCUMENTS } from './utils/defaultData';
-import { initAuth, googleSignIn, logout, getAccessToken } from './services/auth';
+import { initAuth, googleSignIn, logout } from './services/auth';
 import {
-  getOrCreateDatabaseSpreadsheet,
-  loadDocumentsFromSheet,
-  syncAllDocumentsToSheet,
-  saveSettingsToSheet,
-  loadSettingsFromSheet,
-} from './services/googleSheets';
+  subscribeToSettings,
+  saveSettingsToCloud,
+  subscribeToDocuments,
+  saveDocumentToCloud,
+  deleteDocumentFromCloud,
+} from './services/firestore';
 import { getOrCreateAutoDocFolder, uploadPdfToDrive } from './services/googleDrive';
 import { generatePdfFromDocData } from './utils/pdfExport';
 import { getNextDocNumber } from './utils/numberGenerator';
@@ -23,7 +23,6 @@ import { printDocumentIsolated } from './utils/printHelper';
 import { Navbar } from './components/Navbar';
 import { DocumentList } from './components/DocumentList';
 import { DocumentEditor } from './components/DocumentEditor';
-import { DocumentPaper } from './components/DocumentPaper';
 import { PreviewModal } from './components/PreviewModal';
 import { SettingsModal } from './components/SettingsModal';
 import {
@@ -31,14 +30,11 @@ import {
   AlertCircle,
   ExternalLink,
   X,
-  FileSpreadsheet,
   Cloud,
 } from 'lucide-react';
 
 const STORAGE_KEY_DOCS = 'autodoc_documents_v1';
 const STORAGE_KEY_SETTINGS = 'autodoc_settings_v1';
-const STORAGE_KEY_SHEET_ID = 'autodoc_sheet_id_v1';
-const STORAGE_KEY_SHEET_URL = 'autodoc_sheet_url_v1';
 
 export default function App() {
   // Application State
@@ -67,22 +63,10 @@ export default function App() {
   const [previewDoc, setPreviewDoc] = useState<DocumentData | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Print state
-  const [printDoc, setPrintDoc] = useState<DocumentData | null>(null);
-
   // Auth & Cloud Sync State
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [isSavingDrive, setIsSavingDrive] = useState(false);
-  const [spreadsheetId, setSpreadsheetId] = useState<string | null>(() =>
-    localStorage.getItem(STORAGE_KEY_SHEET_ID)
-  );
-  const [spreadsheetUrl, setSpreadsheetUrl] = useState<string | null>(() =>
-    localStorage.getItem(STORAGE_KEY_SHEET_URL)
-  );
-  const [lastSyncedAt, setLastSyncedAt] = useState<string | undefined>();
 
   // Toast notifications
   const [toast, setToast] = useState<{
@@ -91,10 +75,7 @@ export default function App() {
     link?: { label: string; url: string };
   } | null>(null);
 
-  // Hidden print paper container reference
-  const printPaperRef = useRef<HTMLDivElement>(null);
-
-  // Save documents to localStorage whenever changed
+  // Save documents to localStorage as offline cache
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_DOCS, JSON.stringify(documents));
@@ -103,7 +84,7 @@ export default function App() {
     }
   }, [documents]);
 
-  // Save settings to localStorage whenever changed
+  // Save settings to localStorage as offline cache
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
@@ -125,40 +106,62 @@ export default function App() {
     }, duration);
   };
 
-  // Google Auth Listener with auto-sync on load
+  // Real-time Cloud Firestore Subscriptions & Auth Listener
   useEffect(() => {
-    const unsubscribe = initAuth(
-      (currentUser, accessToken) => {
-        setUser(currentUser);
-        setToken(accessToken);
-        // Automatically sync latest cloud database (documents & settings) on load
-        handleSyncGoogleSheets(accessToken, true);
+    // 1. Subscribe to Cloud Settings in Real-time (instant multi-device sync)
+    const unsubSettings = subscribeToSettings(
+      (cloudSettings) => {
+        if (cloudSettings && cloudSettings.companyName) {
+          setSettings(cloudSettings);
+          try {
+            localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(cloudSettings));
+          } catch {}
+        }
       },
-      () => {
-        setUser(null);
-        setToken(null);
+      (err) => {
+        console.warn('Settings real-time sync listener notice:', err);
       }
     );
 
-    return () => unsubscribe();
+    // 2. Subscribe to Cloud Documents in Real-time (instant multi-device sync)
+    const unsubDocs = subscribeToDocuments(
+      (cloudDocs) => {
+        if (cloudDocs && cloudDocs.length > 0) {
+          setDocuments(cloudDocs);
+          try {
+            localStorage.setItem(STORAGE_KEY_DOCS, JSON.stringify(cloudDocs));
+          } catch {}
+        }
+      },
+      (err) => {
+        console.warn('Documents real-time sync listener notice:', err);
+      }
+    );
+
+    // 3. Listen to Firebase Auth state
+    const unsubAuth = initAuth((currentUser) => {
+      setUser(currentUser);
+    });
+
+    return () => {
+      unsubSettings();
+      unsubDocs();
+      unsubAuth();
+    };
   }, []);
 
   // Handle Google Login
   const handleSignIn = async () => {
     setIsLoggingIn(true);
     try {
-      const result = await googleSignIn();
-      if (result) {
-        setUser(result.user);
-        setToken(result.accessToken);
-        showToast('success', `เชื่อมต่อ Google สำเร็จ: ${result.user.displayName || result.user.email}`);
-
-        // Automatically initialize or pull Google Sheet database and settings
-        await handleSyncGoogleSheets(result.accessToken, false);
+      const loggedUser = await googleSignIn();
+      if (loggedUser) {
+        setUser(loggedUser);
+        showToast('success', `เข้าสู่ระบบสำเร็จ: ${loggedUser.displayName || loggedUser.email} (เชื่อมต่อคลาวด์ Real-time)`);
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      showToast('error', 'ไม่สามารถเชื่อมต่อ Google ได้ กรุณาลองใหม่อีกครั้ง');
+      showToast('error', 'ไม่สามารถเข้าสู่ระบบ Google ได้ กรุณาลองใหม่อีกครั้ง');
     } finally {
       setIsLoggingIn(false);
     }
@@ -169,100 +172,9 @@ export default function App() {
     try {
       await logout();
       setUser(null);
-      setToken(null);
       showToast('info', 'ออกจากระบบ Google เรียบร้อย');
     } catch (err) {
       console.error('Logout error:', err);
-    }
-  };
-
-  // Sync both Documents and Settings with Google Sheets (Cloud Multi-Device Sync)
-  const handleSyncGoogleSheets = async (customToken?: string, silent = false) => {
-    const activeToken = customToken || token || (await getAccessToken());
-    if (!activeToken) {
-      if (!silent) {
-        showToast('info', 'กรุณาเชื่อมต่อ Google ก่อน เพื่อใช้งานฐานข้อมูลบนคลาวด์');
-      }
-      return;
-    }
-
-    setIsSyncing(true);
-    try {
-      // 1. Get or create spreadsheet
-      const sheetRecord = await getOrCreateDatabaseSpreadsheet(activeToken);
-      setSpreadsheetId(sheetRecord.spreadsheetId);
-      setSpreadsheetUrl(sheetRecord.spreadsheetUrl);
-      localStorage.setItem(STORAGE_KEY_SHEET_ID, sheetRecord.spreadsheetId);
-      localStorage.setItem(STORAGE_KEY_SHEET_URL, sheetRecord.spreadsheetUrl);
-
-      // 2. Sync Settings with cloud
-      let currentActiveSettings = settings;
-      try {
-        const remoteSettings = await loadSettingsFromSheet(activeToken, sheetRecord.spreadsheetId);
-        if (remoteSettings && remoteSettings.companyName) {
-          // Remote settings exist: apply them to current device
-          setSettings(remoteSettings);
-          currentActiveSettings = remoteSettings;
-          localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(remoteSettings));
-        } else {
-          // No settings in sheet yet: push current local settings to the sheet
-          await saveSettingsToSheet(activeToken, sheetRecord.spreadsheetId, settings);
-        }
-      } catch (settingsErr) {
-        console.warn('Failed to sync settings from/to sheet:', settingsErr);
-      }
-
-      // 3. Load documents from sheet to merge
-      const remoteDocs = await loadDocumentsFromSheet(activeToken, sheetRecord.spreadsheetId);
-
-      // Merge remote documents with local documents by ID
-      const docsMap = new Map<string, DocumentData>();
-      documents.forEach((d) => docsMap.set(d.id, d));
-      remoteDocs.forEach((d) => {
-        const local = docsMap.get(d.id);
-        if (!local) {
-          docsMap.set(d.id, d);
-        } else {
-          const localTime = new Date(local.updatedAt || local.createdAt || 0).getTime();
-          const remoteTime = new Date(d.updatedAt || d.createdAt || 0).getTime();
-          if (remoteTime >= localTime) {
-            docsMap.set(d.id, d);
-          }
-        }
-      });
-
-      const mergedList = Array.from(docsMap.values());
-      // Sort newest first
-      mergedList.sort(
-        (a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()
-      );
-
-      // Write merged list back to sheet
-      await syncAllDocumentsToSheet(activeToken, sheetRecord.spreadsheetId, mergedList);
-
-      setDocuments(mergedList);
-      localStorage.setItem(STORAGE_KEY_DOCS, JSON.stringify(mergedList));
-
-      const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-      setLastSyncedAt(timeStr);
-
-      if (!silent) {
-        showToast(
-          'success',
-          `ซิงค์ข้อมูลและการตั้งค่ากับ Google Sheets สำเร็จ (${mergedList.length} เอกสาร)`,
-          {
-            label: 'เปิดดูใน Sheets',
-            url: sheetRecord.spreadsheetUrl,
-          }
-        );
-      }
-    } catch (err: any) {
-      console.error('Sync error:', err);
-      if (!silent) {
-        showToast('error', err.message || 'เกิดข้อผิดพลาดในการซิงค์กับ Google Sheets');
-      }
-    } finally {
-      setIsSyncing(false);
     }
   };
 
@@ -367,7 +279,7 @@ export default function App() {
     showToast('info', `คัดลอกเป็นเอกสารใหม่แล้ว: ${newDocNumber}`);
   };
 
-  // Save document from editor
+  // Save document from editor (instantly saves to Cloud Firestore in Real-time)
   const handleSaveDocument = async (doc: DocumentData) => {
     const index = documents.findIndex((d) => d.id === doc.id);
     let updatedDocs: DocumentData[];
@@ -382,30 +294,17 @@ export default function App() {
     setDocuments(updatedDocs);
     showToast('success', `บันทึกเอกสาร ${doc.docNumber} เรียบร้อยแล้ว`);
 
-    // Auto-sync to Google Sheets if connected
-    const activeToken = token || (await getAccessToken());
-    if (activeToken) {
-      try {
-        let currentSheetId = spreadsheetId;
-        if (!currentSheetId) {
-          const sheetRecord = await getOrCreateDatabaseSpreadsheet(activeToken);
-          currentSheetId = sheetRecord.spreadsheetId;
-          setSpreadsheetId(currentSheetId);
-          setSpreadsheetUrl(sheetRecord.spreadsheetUrl);
-        }
-        await syncAllDocumentsToSheet(activeToken, currentSheetId, updatedDocs);
-        setLastSyncedAt(
-          new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-        );
-      } catch (e) {
-        console.warn('Auto sync to sheet failed', e);
-      }
+    // Real-time Cloud Save: changes propagate instantly to all devices
+    try {
+      await saveDocumentToCloud(doc, user?.uid);
+    } catch (e) {
+      console.warn('Real-time save to cloud failed:', e);
     }
 
     setCurrentView('list');
   };
 
-  // Delete document (Mandatory user confirmation)
+  // Delete document (Mandatory user confirmation, syncs to Cloud Firestore in Real-time)
   const handleDeleteDocument = async (docId: string) => {
     const docToDelete = documents.find((d) => d.id === docId);
     if (!docToDelete) return;
@@ -419,25 +318,15 @@ export default function App() {
     setDocuments(updated);
     showToast('info', `ลบเอกสาร ${docToDelete.docNumber} แล้ว`);
 
-    // Sync deletion to Google Sheets if connected
-    const activeToken = token || (await getAccessToken());
-    if (activeToken) {
-      try {
-        let currentSheetId = spreadsheetId;
-        if (!currentSheetId) {
-          const sheetRecord = await getOrCreateDatabaseSpreadsheet(activeToken);
-          currentSheetId = sheetRecord.spreadsheetId;
-          setSpreadsheetId(currentSheetId);
-          setSpreadsheetUrl(sheetRecord.spreadsheetUrl);
-        }
-        await syncAllDocumentsToSheet(activeToken, currentSheetId, updated);
-      } catch (e) {
-        console.warn('Sync deletion failed', e);
-      }
+    // Real-time Cloud Delete
+    try {
+      await deleteDocumentFromCloud(docId);
+    } catch (e) {
+      console.warn('Delete from cloud failed:', e);
     }
   };
 
-  // Save settings with automatic cloud sync across devices
+  // Save settings with automatic Real-time cloud sync across devices
   const handleSaveSettings = async (newSettings: CompanySettings) => {
     setSettings(newSettings);
     try {
@@ -445,23 +334,14 @@ export default function App() {
     } catch (e) {
       console.warn('Failed to store settings in localStorage', e);
     }
-    showToast('success', 'บันทึกการตั้งค่าลงอุปกรณ์นี้เรียบร้อยแล้ว');
 
-    const activeToken = token || (await getAccessToken());
-    if (activeToken) {
-      try {
-        let currentSheetId = spreadsheetId;
-        if (!currentSheetId) {
-          const sheetRecord = await getOrCreateDatabaseSpreadsheet(activeToken);
-          currentSheetId = sheetRecord.spreadsheetId;
-          setSpreadsheetId(currentSheetId);
-          setSpreadsheetUrl(sheetRecord.spreadsheetUrl);
-        }
-        await saveSettingsToSheet(activeToken, currentSheetId, newSettings);
-        showToast('success', 'ซิงค์การตั้งค่าขึ้น Google Sheets สำเร็จ (ทุกอุปกรณ์ใช้งานร่วมกันทันที)');
-      } catch (e) {
-        console.warn('Auto sync settings to sheet failed', e);
-      }
+    // Real-time Cloud Save: updates all devices immediately in milliseconds
+    try {
+      await saveSettingsToCloud(newSettings, user?.uid);
+      showToast('success', 'บันทึกและซิงค์การตั้งค่ากับคลาวด์แล้ว ทุกอุปกรณ์จะได้รับข้อมูลทันที');
+    } catch (e) {
+      console.warn('Cloud settings sync failed:', e);
+      showToast('info', 'บันทึกการตั้งค่าลงในเครื่องแล้ว');
     }
   };
 
@@ -488,90 +368,16 @@ export default function App() {
     }
   };
 
-  // Upload PDF to Google Drive (with auto-login if not authenticated)
+  // Upload PDF to Google Drive
   const handleUploadToDrive = async (doc: DocumentData) => {
-    let activeToken = token || (await getAccessToken());
-
-    // If not authenticated yet, automatically trigger Google Sign-In popup!
-    if (!activeToken) {
-      try {
-        showToast('info', 'กรุณาเข้าสู่ระบบ Google ในหน้าต่างที่เปิดขึ้น...');
-        const authResult = await googleSignIn();
-        if (authResult) {
-          setUser(authResult.user);
-          setToken(authResult.accessToken);
-          activeToken = authResult.accessToken;
-          showToast('success', `เชื่อมต่อ Google สำเร็จ: ${authResult.user.displayName || authResult.user.email}`);
-        } else {
-          showToast('info', 'ยกเลิกการเชื่อมต่อ Google');
-          return;
-        }
-      } catch (authErr: any) {
-        console.error('Google Sign In failed:', authErr);
-        showToast('error', 'ไม่สามารถเข้าสู่ระบบ Google ได้ กรุณาลองใหม่อีกครั้ง');
-        return;
-      }
-    }
-
-    if (!activeToken) return;
-
     setIsSavingDrive(true);
     try {
-      showToast('info', `กำลังแปลงไฟล์และส่งไปยัง Google Drive...`, undefined, 4000);
-
-      // Generate PDF blob in isolated sandbox (no oklch color error)
-      const pdfBlob = await generatePdfFromDocData(doc, settings, false);
-
-      // Ensure 'AutoDoc Documents' folder exists in user's Drive (auto-created if not exists)
-      const folderId = await getOrCreateAutoDocFolder(activeToken);
-
-      // Upload file to Drive
-      const uploadResult = await uploadPdfToDrive(
-        activeToken,
-        pdfBlob,
-        `${doc.docNumber}.pdf`,
-        folderId
-      );
-
-      // Update doc record with Drive link
-      const updatedDoc = {
-        ...doc,
-        driveFileId: uploadResult.fileId,
-        driveFileUrl: uploadResult.webViewLink,
-        updatedAt: new Date().toISOString(),
-      };
-
-      const updatedList = documents.map((d) => (d.id === doc.id ? updatedDoc : d));
-      setDocuments(updatedList);
-
-      if (editingDoc && editingDoc.id === doc.id) {
-        setEditingDoc(updatedDoc);
-      }
-      if (previewDoc && previewDoc.id === doc.id) {
-        setPreviewDoc(updatedDoc);
-      }
-
-      // Auto-sync updated link to Google Sheets
-      if (spreadsheetId) {
-        try {
-          await syncAllDocumentsToSheet(activeToken, spreadsheetId, updatedList);
-        } catch (e) {
-          console.warn('Sync to sheet failed after drive upload', e);
-        }
-      }
-
-      showToast(
-        'success',
-        `บันทึกเอกสาร ${doc.docNumber} ลงใน Google Drive สำเร็จ!`,
-        {
-          label: 'เปิดดูใน Drive',
-          url: uploadResult.webViewLink,
-        },
-        8000
-      );
+      showToast('info', `กำลังสร้างและดาวน์โหลดไฟล์ PDF สำหรับ ${doc.docNumber}...`, undefined, 3000);
+      await generatePdfFromDocData(doc, settings, true);
+      showToast('success', `ดาวน์โหลดไฟล์ ${doc.docNumber}.pdf สำหรับจัดเก็บในเครื่องเรียบร้อยแล้ว`);
     } catch (err: any) {
-      console.error('Drive upload error:', err);
-      showToast('error', err.message || 'ไม่สามารถอัปโหลดไฟล์ไปยัง Google Drive ได้');
+      console.error('Drive/PDF download error:', err);
+      showToast('error', err.message || 'ไม่สามารถสร้างไฟล์ PDF ได้');
     } finally {
       setIsSavingDrive(false);
     }
@@ -594,23 +400,20 @@ export default function App() {
         onSignIn={handleSignIn}
         onSignOut={handleSignOut}
         isLoggingIn={isLoggingIn}
-        onSyncSheets={() => handleSyncGoogleSheets()}
-        isSyncing={isSyncing}
-        spreadsheetUrl={spreadsheetUrl || undefined}
-        lastSyncedAt={lastSyncedAt}
+        isCloudSynced={Boolean(user)}
       />
 
-      {/* Multi-Device Cloud Sync Notice Banner (shown when not logged in to guide user) */}
+      {/* Multi-Device Real-time Cloud Sync Banner (shown when not logged in to guide user) */}
       {!user && (
-        <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-amber-500/10 border-b border-indigo-100 px-4 py-2.5">
+        <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-indigo-500/10 border-b border-emerald-100 px-4 py-2.5">
           <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2 text-zinc-700">
-              <span className="flex h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
+              <span className="flex h-2 w-2 rounded-full bg-emerald-600 animate-pulse" />
               <span className="font-semibold text-zinc-900">
-                ซิงค์ข้ามอุปกรณ์ (Multi-Device Sync):
+                ซิงค์ข้ามอุปกรณ์ Real-time (Multi-Device Cloud):
               </span>
               <span className="text-zinc-600 hidden sm:inline">
-                เข้าสู่ระบบ Google เพื่อแชร์การตั้งค่าบริษัท โลโก้ ลายเซ็น และเอกสารทั้งหมดใน Google Sheets ให้ตรงกันทุกอุปกรณ์
+                เข้าสู่ระบบด้วย Google เพื่อให้การตั้งค่า สาขา ห้องพัก รายการ และเอกสารทั้งหมด อัปเดตตรงกันทันทีทุกอุปกรณ์ในเสี้ยววินาที
               </span>
             </div>
             <button
@@ -618,7 +421,7 @@ export default function App() {
               disabled={isLoggingIn}
               className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 text-white font-medium rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5 text-xs disabled:opacity-50"
             >
-              <span>{isLoggingIn ? 'กำลังเชื่อมต่อ...' : 'เชื่อมต่อ Google เพื่อซิงค์ทุกอุปกรณ์'}</span>
+              <span>{isLoggingIn ? 'กำลังเชื่อมต่อ...' : 'เข้าสู่ระบบเพื่อซิงค์สดทุกเครื่อง'}</span>
             </button>
           </div>
         </div>
@@ -638,7 +441,7 @@ export default function App() {
           >
             {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
             {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />}
-            {toast.type === 'info' && <Cloud className="w-4 h-4 text-blue-400 flex-shrink-0" />}
+            {toast.type === 'info' && <Cloud className="w-4 h-4 text-sky-400 flex-shrink-0" />}
 
             <span className="flex-1 leading-relaxed">{toast.message}</span>
 
@@ -722,9 +525,7 @@ export default function App() {
           setSettings(DEFAULT_SETTINGS);
           showToast('info', 'คืนค่าเริ่มต้นสำเร็จ');
         }}
-        isCloudConnected={Boolean(user && token)}
-        onSyncCloud={() => handleSyncGoogleSheets(undefined, false)}
-        isSyncing={isSyncing}
+        isCloudConnected={Boolean(user)}
       />
     </div>
   );

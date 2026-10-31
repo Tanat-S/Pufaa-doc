@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow create, update: if isSignedIn() && request.auth.uid == userId && isValidId(userId);
+    }
+
+    // Shared Business Settings (Branches, Room types, Item presets, Signatures, Company profile)
+    match /settings/{settingId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(settingId);
+    }
+
+    // Saved Documents (Invoices, Receipts, Reservation Confirmations)
+    match /documents/{documentId} {
+      allow get: if isSignedIn() && (resource == null || resource.data.createdBy == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.createdBy == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(documentId) && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(documentId) && resource.data.createdBy == request.auth.uid && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if isSignedIn() && isValidId(documentId) && resource.data.createdBy == request.auth.uid;
+    }
+  }
+}

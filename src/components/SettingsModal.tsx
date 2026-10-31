@@ -914,8 +914,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="flex items-center gap-2">
                       <h3 className="font-bold text-sm text-zinc-900">
                         {isCloudConnected
-                          ? 'ระบบคลาวด์เชื่อมต่อแล้ว (Google Sheets & Drive Database)'
-                          : 'ยังไม่ได้เชื่อมต่อระบบคลาวด์ Google บนอุปกรณ์นี้'}
+                          ? 'ระบบคลาวด์เชื่อมต่อแล้ว (Real-time Cloud Database)'
+                          : 'ยังไม่ได้เข้าสู่ระบบ Google บนอุปกรณ์นี้'}
                       </h3>
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
@@ -924,35 +924,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             : 'bg-amber-200 text-amber-900'
                         }`}
                       >
-                        {isCloudConnected ? 'ออนไลน์' : 'ออฟไลน์ (เครื่องนี้)'}
+                        {isCloudConnected ? 'ออนไลน์ Real-time' : 'ออฟไลน์ (เครื่องนี้)'}
                       </span>
                     </div>
                     <p className="text-xs text-zinc-600 leading-relaxed">
                       {isCloudConnected
-                        ? 'ข้อมูลผู้ออกเอกสาร โลโก้ ลายเซ็น รายการสินค้า ห้องพัก และเงื่อนไขต่าง ๆ จะถูกบันทึกขึ้นแท็บ "Settings" ใน Google Sheets อัตโนมัติ ทำให้คุณเปิดใช้งานจากคอมพิวเตอร์ โน้ตบุ๊ก แท็บเล็ต หรือมือถือเครื่องใดก็ได้ แล้วได้ข้อมูลตรงกันตลอดเวลา'
-                        : 'ปัจจุบันการตั้งค่าของคุณถูกบันทึกไว้ในเบราว์เซอร์ของเครื่องนี้เท่านั้น หากคุณเปิดจากอุปกรณ์อื่น ระบบจะยังไม่เห็นข้อมูลการตั้งค่านี้ กรุณากดปุ่ม "เชื่อมต่อ Google" ที่แถบด้านบน เพื่อเริ่มแชร์ข้อมูลอัตโนมัติ'}
+                        ? 'ข้อมูลสาขา, ประเภทห้องพักและหมายเลขห้อง, รายการสินค้า/บริการที่บันทึกล่วงหน้า, ข้อมูลบริษัท และภาพลายเซ็น จะถูกซิงค์ผ่านระบบคลาวด์ทันทีในเสี้ยววินาที เมื่อคุณหรือทีมงานเปิดใช้งานจากคอมพิวเตอร์ โน้ตบุ๊ก แท็บเล็ต หรือสมาร์ทโฟนเครื่องใดก็ตามที่เข้าสู่ระบบด้วย Google ข้อมูลจะตรงกันเสมอโดยไม่ต้องกดปุ่มรีเฟรช'
+                        : 'ปัจจุบันการตั้งค่าของคุณถูกบันทึกไว้ในเบราว์เซอร์ของอุปกรณ์นี้เท่านั้น หากคุณเปิดจากอุปกรณ์อื่น ระบบจะไม่เห็นการตั้งค่านี้ กรุณากดปุ่ม "เข้าสู่ระบบด้วย Google" ที่แถบด้านบน เพื่อเริ่มซิงค์ข้อมูลแบบ Real-time ข้ามอุปกรณ์'}
                     </p>
 
                     {isCloudConnected && (
                       <div className="pt-2 flex flex-wrap items-center gap-2">
-                        {onSyncCloud && (
-                          <button
-                            type="button"
-                            onClick={() => onSyncCloud()}
-                            disabled={isSyncing}
-                            className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 text-xs"
-                          >
-                            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                            <span>{isSyncing ? 'กำลังดึงข้อมูล...' : 'ดึงการตั้งค่าล่าสุดจาก Google Sheets'}</span>
-                          </button>
-                        )}
                         <button
                           type="button"
                           onClick={handleSave}
                           className="px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer text-xs"
                         >
                           <Cloud className="w-3.5 h-3.5 text-sky-400" />
-                          <span>บันทึกและส่งขึ้น Google Sheets ทันที</span>
+                          <span>บันทึกและซิงค์การตั้งค่าขึ้นคลาวด์ทันที</span>
                         </button>
                       </div>
                     )}

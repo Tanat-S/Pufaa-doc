@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Business settings including branches, room types, line item presets, and company info",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "branches": { "type": "array", "description": "Hotel and company branches" },
+        "roomTypes": { "type": "array", "description": "Room types with linked room numbers" },
+        "itemPresets": { "type": "array", "description": "Saved item name, description, and unit presets" },
+        "companyProfile": { "type": "object", "description": "Business name, tax ID, and address" },
+        "signatureUrl": { "type": "string", "description": "Authorized signatory signature base64 or URL" },
+        "signerName": { "type": "string", "maxLength": 200, "description": "Signer name" },
+        "defaultShowSignature": { "type": "boolean", "description": "Whether signature is shown by default" },
+        "updatedAt": { "type": "string", "maxLength": 64, "description": "ISO timestamp of last update" },
+        "updatedBy": { "type": "string", "maxLength": 128, "description": "User UID who made the update" }
+      },
+      "required": ["id", "updatedAt"]
+    },
+    "DocumentRecord": {
+      "title": "DocumentRecord",
+      "description": "Saved invoices, receipts, and reservation confirmations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "docType": { "type": "string", "maxLength": 64, "description": "tax_invoice, invoice, receipt, or reservation_cf" },
+        "docNumber": { "type": "string", "maxLength": 128, "description": "Document serial number" },
+        "docDate": { "type": "string", "maxLength": 32, "description": "Document date YYYY-MM-DD" },
+        "branch": { "type": "string", "maxLength": 200, "description": "Branch name" },
+        "customer": { "type": "object", "description": "Customer name, address, tax ID" },
+        "reservationDetails": { "type": "object", "description": "Hotel reservation details with room rows and nights" },
+        "items": { "type": "array", "description": "Line items with quantity, price, discount" },
+        "totals": { "type": "object", "description": "Subtotal, VAT, discount, grand total" },
+        "signature": { "type": "object", "description": "Signature settings for this document" },
+        "createdBy": { "type": "string", "maxLength": 128, "description": "User UID who created the document" },
+        "createdAt": { "type": "string", "maxLength": 64, "description": "ISO timestamp of creation" },
+        "updatedAt": { "type": "string", "maxLength": 64, "description": "ISO timestamp of update" }
+      },
+      "required": ["id", "docType", "docNumber", "docDate", "createdBy", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "description": "Firebase Auth UID" },
+        "email": { "type": "string", "maxLength": 256, "description": "User email address" },
+        "displayName": { "type": "string", "maxLength": 200, "description": "User display name" },
+        "photoURL": { "type": "string", "description": "User avatar URL" },
+        "createdAt": { "type": "string", "maxLength": 64, "description": "ISO timestamp" }
+      },
+      "required": ["uid", "email"]
+    }
+  },
+  "firestore": {
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/AppSettings" },
+      "description": "Business settings shared among authorized organization users"
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/DocumentRecord" },
+      "description": "Documents created and saved in the system"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles"
+    }
+  }
+}
