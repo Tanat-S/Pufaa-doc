@@ -21,8 +21,16 @@ export const SCOPES = [
 const provider = new GoogleAuthProvider();
 SCOPES.forEach((scope) => provider.addScope(scope));
 
+const STORAGE_KEY_TOKEN = 'autodoc_google_access_token_v1';
+
 let isSigningIn = false;
-let cachedAccessToken: string | null = null;
+let cachedAccessToken: string | null = (() => {
+  try {
+    return localStorage.getItem(STORAGE_KEY_TOKEN);
+  } catch {
+    return null;
+  }
+})();
 
 // Initialize auth state listener. Call this on app load.
 export const initAuth = (
@@ -31,15 +39,21 @@ export const initAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
+      if (!cachedAccessToken) {
+        try {
+          cachedAccessToken = localStorage.getItem(STORAGE_KEY_TOKEN);
+        } catch {}
+      }
       if (cachedAccessToken) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
-        // Cached token lost on reload; user will re-authenticate with prompt
-        cachedAccessToken = null;
         if (onAuthFailure) onAuthFailure();
       }
     } else {
       cachedAccessToken = null;
+      try {
+        localStorage.removeItem(STORAGE_KEY_TOKEN);
+      } catch {}
       if (onAuthFailure) onAuthFailure();
     }
   });
@@ -56,6 +70,9 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
 
     cachedAccessToken = credential.accessToken;
+    try {
+      localStorage.setItem(STORAGE_KEY_TOKEN, cachedAccessToken);
+    } catch {}
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error('Sign in error:', error);
@@ -66,10 +83,18 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
+  if (!cachedAccessToken) {
+    try {
+      cachedAccessToken = localStorage.getItem(STORAGE_KEY_TOKEN);
+    } catch {}
+  }
   return cachedAccessToken;
 };
 
 export const logout = async () => {
   await signOut(auth);
   cachedAccessToken = null;
+  try {
+    localStorage.removeItem(STORAGE_KEY_TOKEN);
+  } catch {}
 };

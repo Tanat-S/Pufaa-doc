@@ -104,16 +104,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Google Workspace Authentication & Sync */}
           {user ? (
             <div className="flex items-center gap-2 border-l border-zinc-200 pl-3">
-              {/* Sync with Google Sheets Button */}
+              {/* Sync with Google Sheets Button (Docs + Settings) */}
               <button
                 onClick={onSyncSheets}
                 disabled={isSyncing}
-                title={lastSyncedAt ? `ซิงค์ล่าสุดเมื่อ ${lastSyncedAt}` : 'ซิงค์ข้อมูลกับ Google Sheets'}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+                title={lastSyncedAt ? `ซิงค์ล่าสุดเมื่อ ${lastSyncedAt} (เอกสาร + การตั้งค่า)` : 'ซิงค์เอกสารและการตั้งค่าทั้งหมดกับ Google Sheets'}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
                 <span className="hidden sm:inline">
-                  {isSyncing ? 'กำลังซิงค์...' : 'ซิงค์ Sheets'}
+                  {isSyncing ? 'กำลังซิงค์...' : 'ซิงค์ข้อมูล & ตั้งค่า'}
                 </span>
               </button>
 

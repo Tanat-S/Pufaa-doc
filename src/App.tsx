@@ -12,6 +12,8 @@ import {
   getOrCreateDatabaseSpreadsheet,
   loadDocumentsFromSheet,
   syncAllDocumentsToSheet,
+  saveSettingsToSheet,
+  loadSettingsFromSheet,
 } from './services/googleSheets';
 import { getOrCreateAutoDocFolder, uploadPdfToDrive } from './services/googleDrive';
 import { generatePdfFromDocData } from './utils/pdfExport';
@@ -123,12 +125,14 @@ export default function App() {
     }, duration);
   };
 
-  // Google Auth Listener
+  // Google Auth Listener with auto-sync on load
   useEffect(() => {
     const unsubscribe = initAuth(
       (currentUser, accessToken) => {
         setUser(currentUser);
         setToken(accessToken);
+        // Automatically sync latest cloud database (documents & settings) on load
+        handleSyncGoogleSheets(accessToken, true);
       },
       () => {
         setUser(null);
@@ -149,8 +153,8 @@ export default function App() {
         setToken(result.accessToken);
         showToast('success', `เชื่อมต่อ Google สำเร็จ: ${result.user.displayName || result.user.email}`);
 
-        // Automatically initialize or find Google Sheet database
-        await handleSyncGoogleSheets(result.accessToken);
+        // Automatically initialize or pull Google Sheet database and settings
+        await handleSyncGoogleSheets(result.accessToken, false);
       }
     } catch (err: any) {
       console.error('Login error:', err);
@@ -172,11 +176,13 @@ export default function App() {
     }
   };
 
-  // Sync with Google Sheets
-  const handleSyncGoogleSheets = async (customToken?: string) => {
+  // Sync both Documents and Settings with Google Sheets (Cloud Multi-Device Sync)
+  const handleSyncGoogleSheets = async (customToken?: string, silent = false) => {
     const activeToken = customToken || token || (await getAccessToken());
     if (!activeToken) {
-      showToast('info', 'กรุณาเชื่อมต่อ Google ก่อน เพื่อใช้งานฐานข้อมูลบนคลาวด์');
+      if (!silent) {
+        showToast('info', 'กรุณาเชื่อมต่อ Google ก่อน เพื่อใช้งานฐานข้อมูลบนคลาวด์');
+      }
       return;
     }
 
@@ -189,13 +195,41 @@ export default function App() {
       localStorage.setItem(STORAGE_KEY_SHEET_ID, sheetRecord.spreadsheetId);
       localStorage.setItem(STORAGE_KEY_SHEET_URL, sheetRecord.spreadsheetUrl);
 
-      // 2. Load any documents from sheet to merge
+      // 2. Sync Settings with cloud
+      let currentActiveSettings = settings;
+      try {
+        const remoteSettings = await loadSettingsFromSheet(activeToken, sheetRecord.spreadsheetId);
+        if (remoteSettings && remoteSettings.companyName) {
+          // Remote settings exist: apply them to current device
+          setSettings(remoteSettings);
+          currentActiveSettings = remoteSettings;
+          localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(remoteSettings));
+        } else {
+          // No settings in sheet yet: push current local settings to the sheet
+          await saveSettingsToSheet(activeToken, sheetRecord.spreadsheetId, settings);
+        }
+      } catch (settingsErr) {
+        console.warn('Failed to sync settings from/to sheet:', settingsErr);
+      }
+
+      // 3. Load documents from sheet to merge
       const remoteDocs = await loadDocumentsFromSheet(activeToken, sheetRecord.spreadsheetId);
 
       // Merge remote documents with local documents by ID
       const docsMap = new Map<string, DocumentData>();
       documents.forEach((d) => docsMap.set(d.id, d));
-      remoteDocs.forEach((d) => docsMap.set(d.id, d)); // remote takes update priority if exists
+      remoteDocs.forEach((d) => {
+        const local = docsMap.get(d.id);
+        if (!local) {
+          docsMap.set(d.id, d);
+        } else {
+          const localTime = new Date(local.updatedAt || local.createdAt || 0).getTime();
+          const remoteTime = new Date(d.updatedAt || d.createdAt || 0).getTime();
+          if (remoteTime >= localTime) {
+            docsMap.set(d.id, d);
+          }
+        }
+      });
 
       const mergedList = Array.from(docsMap.values());
       // Sort newest first
@@ -203,24 +237,30 @@ export default function App() {
         (a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()
       );
 
-      // 3. Write merged list back to sheet
+      // Write merged list back to sheet
       await syncAllDocumentsToSheet(activeToken, sheetRecord.spreadsheetId, mergedList);
 
       setDocuments(mergedList);
+      localStorage.setItem(STORAGE_KEY_DOCS, JSON.stringify(mergedList));
+
       const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
       setLastSyncedAt(timeStr);
 
-      showToast(
-        'success',
-        `ซิงค์ข้อมูลลง Google Sheets เรียบร้อย (${mergedList.length} รายการ)`,
-        {
-          label: 'เปิดดูใน Sheets',
-          url: sheetRecord.spreadsheetUrl,
-        }
-      );
+      if (!silent) {
+        showToast(
+          'success',
+          `ซิงค์ข้อมูลและการตั้งค่ากับ Google Sheets สำเร็จ (${mergedList.length} เอกสาร)`,
+          {
+            label: 'เปิดดูใน Sheets',
+            url: sheetRecord.spreadsheetUrl,
+          }
+        );
+      }
     } catch (err: any) {
       console.error('Sync error:', err);
-      showToast('error', err.message || 'เกิดข้อผิดพลาดในการซิงค์กับ Google Sheets');
+      if (!silent) {
+        showToast('error', err.message || 'เกิดข้อผิดพลาดในการซิงค์กับ Google Sheets');
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -344,9 +384,16 @@ export default function App() {
 
     // Auto-sync to Google Sheets if connected
     const activeToken = token || (await getAccessToken());
-    if (activeToken && spreadsheetId) {
+    if (activeToken) {
       try {
-        await syncAllDocumentsToSheet(activeToken, spreadsheetId, updatedDocs);
+        let currentSheetId = spreadsheetId;
+        if (!currentSheetId) {
+          const sheetRecord = await getOrCreateDatabaseSpreadsheet(activeToken);
+          currentSheetId = sheetRecord.spreadsheetId;
+          setSpreadsheetId(currentSheetId);
+          setSpreadsheetUrl(sheetRecord.spreadsheetUrl);
+        }
+        await syncAllDocumentsToSheet(activeToken, currentSheetId, updatedDocs);
         setLastSyncedAt(
           new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
         );
@@ -374,11 +421,46 @@ export default function App() {
 
     // Sync deletion to Google Sheets if connected
     const activeToken = token || (await getAccessToken());
-    if (activeToken && spreadsheetId) {
+    if (activeToken) {
       try {
-        await syncAllDocumentsToSheet(activeToken, spreadsheetId, updated);
+        let currentSheetId = spreadsheetId;
+        if (!currentSheetId) {
+          const sheetRecord = await getOrCreateDatabaseSpreadsheet(activeToken);
+          currentSheetId = sheetRecord.spreadsheetId;
+          setSpreadsheetId(currentSheetId);
+          setSpreadsheetUrl(sheetRecord.spreadsheetUrl);
+        }
+        await syncAllDocumentsToSheet(activeToken, currentSheetId, updated);
       } catch (e) {
         console.warn('Sync deletion failed', e);
+      }
+    }
+  };
+
+  // Save settings with automatic cloud sync across devices
+  const handleSaveSettings = async (newSettings: CompanySettings) => {
+    setSettings(newSettings);
+    try {
+      localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(newSettings));
+    } catch (e) {
+      console.warn('Failed to store settings in localStorage', e);
+    }
+    showToast('success', 'บันทึกการตั้งค่าลงอุปกรณ์นี้เรียบร้อยแล้ว');
+
+    const activeToken = token || (await getAccessToken());
+    if (activeToken) {
+      try {
+        let currentSheetId = spreadsheetId;
+        if (!currentSheetId) {
+          const sheetRecord = await getOrCreateDatabaseSpreadsheet(activeToken);
+          currentSheetId = sheetRecord.spreadsheetId;
+          setSpreadsheetId(currentSheetId);
+          setSpreadsheetUrl(sheetRecord.spreadsheetUrl);
+        }
+        await saveSettingsToSheet(activeToken, currentSheetId, newSettings);
+        showToast('success', 'ซิงค์การตั้งค่าขึ้น Google Sheets สำเร็จ (ทุกอุปกรณ์ใช้งานร่วมกันทันที)');
+      } catch (e) {
+        console.warn('Auto sync settings to sheet failed', e);
       }
     }
   };
@@ -518,6 +600,30 @@ export default function App() {
         lastSyncedAt={lastSyncedAt}
       />
 
+      {/* Multi-Device Cloud Sync Notice Banner (shown when not logged in to guide user) */}
+      {!user && (
+        <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-amber-500/10 border-b border-indigo-100 px-4 py-2.5">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-zinc-700">
+              <span className="flex h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
+              <span className="font-semibold text-zinc-900">
+                ซิงค์ข้ามอุปกรณ์ (Multi-Device Sync):
+              </span>
+              <span className="text-zinc-600 hidden sm:inline">
+                เข้าสู่ระบบ Google เพื่อแชร์การตั้งค่าบริษัท โลโก้ ลายเซ็น และเอกสารทั้งหมดใน Google Sheets ให้ตรงกันทุกอุปกรณ์
+              </span>
+            </div>
+            <button
+              onClick={handleSignIn}
+              disabled={isLoggingIn}
+              className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 text-white font-medium rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5 text-xs disabled:opacity-50"
+            >
+              <span>{isLoggingIn ? 'กำลังเชื่อมต่อ...' : 'เชื่อมต่อ Google เพื่อซิงค์ทุกอุปกรณ์'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Toast Notification Alert */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 duration-200">
@@ -611,14 +717,14 @@ export default function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
-        onSave={(newSettings) => {
-          setSettings(newSettings);
-          showToast('success', 'บันทึกการตั้งค่าเรียบร้อยแล้ว');
-        }}
+        onSave={handleSaveSettings}
         onReset={() => {
           setSettings(DEFAULT_SETTINGS);
           showToast('info', 'คืนค่าเริ่มต้นสำเร็จ');
         }}
+        isCloudConnected={Boolean(user && token)}
+        onSyncCloud={() => handleSyncGoogleSheets(undefined, false)}
+        isSyncing={isSyncing}
       />
     </div>
   );

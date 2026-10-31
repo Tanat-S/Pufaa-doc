@@ -15,6 +15,12 @@ import {
   Bed,
   ListPlus,
   Hotel,
+  Cloud,
+  Download,
+  FileUp,
+  RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -23,6 +29,9 @@ interface SettingsModalProps {
   settings: CompanySettings;
   onSave: (newSettings: CompanySettings) => void;
   onReset: () => void;
+  isCloudConnected?: boolean;
+  onSyncCloud?: () => Promise<void>;
+  isSyncing?: boolean;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -31,9 +40,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings: initialSettings,
   onSave,
   onReset,
+  isCloudConnected = false,
+  onSyncCloud,
+  isSyncing = false,
 }) => {
   const [settings, setSettings] = useState<CompanySettings>(initialSettings);
-  const [activeTab, setActiveTab] = useState<'company' | 'payment' | 'terms' | 'presets' | 'rooms'>('company');
+  const [activeTab, setActiveTab] = useState<'company' | 'payment' | 'terms' | 'presets' | 'rooms' | 'cloud'>('company');
 
   if (!isOpen) return null;
 
@@ -60,6 +72,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSave = () => {
     onSave(settings);
     onClose();
+  };
+
+  // Export settings as a downloadable JSON file
+  const handleExportJson = () => {
+    try {
+      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(settings, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute('href', dataStr);
+      downloadAnchor.setAttribute('download', `autodoc_settings_backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } catch {
+      alert('ไม่สามารถส่งออกไฟล์ JSON ได้');
+    }
+  };
+
+  // Import settings from a JSON file
+  const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const imported = JSON.parse(event.target?.result as string);
+          if (imported && typeof imported === 'object' && imported.companyName !== undefined) {
+            setSettings(imported);
+            alert('นำเข้าไฟล์การตั้งค่าสำเร็จ! กรุณากดปุ่ม "บันทึกการตั้งค่า" ด้านล่างเพื่อนำไปใช้งาน');
+          } else {
+            alert('โครงสร้างไฟล์ JSON ไม่ถูกต้องสำหรับ AutoDoc Settings');
+          }
+        } catch {
+          alert('ไม่สามารถอ่านไฟล์ JSON ได้ กรุณาตรวจสอบไฟล์');
+        }
+      };
+      reader.readAsText(file);
+    }
   };
 
   return (
@@ -141,6 +190,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <FileText className="w-4 h-4" />
             <span>หมายเหตุ & เงื่อนไขแต่ละเอกสาร</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('cloud')}
+            className={`py-3 px-3 font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === 'cloud'
+                ? 'border-zinc-900 text-zinc-900'
+                : 'border-transparent text-zinc-500 hover:text-zinc-800'
+            }`}
+          >
+            <Cloud className="w-4 h-4 text-sky-600" />
+            <span>คลาวด์ & ซิงค์ข้ามอุปกรณ์</span>
+            <span
+              className={`w-2 h-2 rounded-full inline-block ml-0.5 ${
+                isCloudConnected ? 'bg-emerald-500' : 'bg-amber-500'
+              }`}
+            />
           </button>
         </div>
 
@@ -819,6 +885,115 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {activeTab === 'cloud' && (
+            <div className="space-y-6">
+              {/* Cloud Sync Status Card */}
+              <div
+                className={`p-5 rounded-2xl border ${
+                  isCloudConnected
+                    ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
+                    : 'bg-amber-50/60 border-amber-200 text-amber-950'
+                }`}
+              >
+                <div className="flex items-start gap-3.5">
+                  <div
+                    className={`p-2.5 rounded-xl ${
+                      isCloudConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                    }`}
+                  >
+                    {isCloudConnected ? (
+                      <CheckCircle2 className="w-6 h-6" />
+                    ) : (
+                      <AlertTriangle className="w-6 h-6" />
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-sm text-zinc-900">
+                        {isCloudConnected
+                          ? 'ระบบคลาวด์เชื่อมต่อแล้ว (Google Sheets & Drive Database)'
+                          : 'ยังไม่ได้เชื่อมต่อระบบคลาวด์ Google บนอุปกรณ์นี้'}
+                      </h3>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                          isCloudConnected
+                            ? 'bg-emerald-200 text-emerald-900'
+                            : 'bg-amber-200 text-amber-900'
+                        }`}
+                      >
+                        {isCloudConnected ? 'ออนไลน์' : 'ออฟไลน์ (เครื่องนี้)'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-600 leading-relaxed">
+                      {isCloudConnected
+                        ? 'ข้อมูลผู้ออกเอกสาร โลโก้ ลายเซ็น รายการสินค้า ห้องพัก และเงื่อนไขต่าง ๆ จะถูกบันทึกขึ้นแท็บ "Settings" ใน Google Sheets อัตโนมัติ ทำให้คุณเปิดใช้งานจากคอมพิวเตอร์ โน้ตบุ๊ก แท็บเล็ต หรือมือถือเครื่องใดก็ได้ แล้วได้ข้อมูลตรงกันตลอดเวลา'
+                        : 'ปัจจุบันการตั้งค่าของคุณถูกบันทึกไว้ในเบราว์เซอร์ของเครื่องนี้เท่านั้น หากคุณเปิดจากอุปกรณ์อื่น ระบบจะยังไม่เห็นข้อมูลการตั้งค่านี้ กรุณากดปุ่ม "เชื่อมต่อ Google" ที่แถบด้านบน เพื่อเริ่มแชร์ข้อมูลอัตโนมัติ'}
+                    </p>
+
+                    {isCloudConnected && (
+                      <div className="pt-2 flex flex-wrap items-center gap-2">
+                        {onSyncCloud && (
+                          <button
+                            type="button"
+                            onClick={() => onSyncCloud()}
+                            disabled={isSyncing}
+                            className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 text-xs"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                            <span>{isSyncing ? 'กำลังดึงข้อมูล...' : 'ดึงการตั้งค่าล่าสุดจาก Google Sheets'}</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleSave}
+                          className="px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer text-xs"
+                        >
+                          <Cloud className="w-3.5 h-3.5 text-sky-400" />
+                          <span>บันทึกและส่งขึ้น Google Sheets ทันที</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Offline Backup & Restore Section */}
+              <div className="bg-zinc-50 p-5 rounded-2xl border border-zinc-200 space-y-3">
+                <div>
+                  <h4 className="font-bold text-xs text-zinc-800 flex items-center gap-1.5">
+                    <Download className="w-4 h-4 text-zinc-600" />
+                    <span>สำรองข้อมูลการตั้งค่าและย้ายเครื่อง (Backup & Restore JSON)</span>
+                  </h4>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">
+                    คุณสามารถดาวน์โหลดไฟล์การตั้งค่าทั้งหมด (รวมโลโก้ ลายเซ็น รายการ และห้องพัก) เก็บไว้เป็นไฟล์ หรือนำไปเปิดบนอุปกรณ์อื่นได้ทันที
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleExportJson}
+                    className="px-3.5 py-2 bg-white hover:bg-zinc-100 border border-zinc-300 rounded-lg text-zinc-700 font-semibold flex items-center gap-1.5 transition-colors cursor-pointer text-xs shadow-2xs"
+                  >
+                    <Download className="w-3.5 h-3.5 text-zinc-700" />
+                    <span>ส่งออกไฟล์สำรอง (.json)</span>
+                  </button>
+
+                  <label className="px-3.5 py-2 bg-white hover:bg-zinc-100 border border-zinc-300 rounded-lg text-zinc-700 font-semibold flex items-center gap-1.5 transition-colors cursor-pointer text-xs shadow-2xs">
+                    <FileUp className="w-3.5 h-3.5 text-zinc-700" />
+                    <span>นำเข้าไฟล์สำรอง (.json)</span>
+                    <input
+                      type="file"
+                      accept=".json,application/json"
+                      onChange={handleImportJson}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
             </div>
           )}
         </div>
