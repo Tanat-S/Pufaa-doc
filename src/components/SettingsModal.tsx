@@ -11,6 +11,10 @@ import {
   Check,
   RotateCcw,
   Sparkles,
+  Plus,
+  Bed,
+  ListPlus,
+  Hotel,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -29,7 +33,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onReset,
 }) => {
   const [settings, setSettings] = useState<CompanySettings>(initialSettings);
-  const [activeTab, setActiveTab] = useState<'company' | 'payment' | 'terms' | 'sync'>('company');
+  const [activeTab, setActiveTab] = useState<'company' | 'payment' | 'terms' | 'presets' | 'rooms'>('company');
 
   if (!isOpen) return null;
 
@@ -78,10 +82,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-zinc-200 bg-zinc-50/70 px-6 gap-2 text-xs">
+        <div className="flex border-b border-zinc-200 bg-zinc-50/70 px-6 gap-2 text-xs overflow-x-auto">
           <button
             onClick={() => setActiveTab('company')}
-            className={`py-3 px-3 font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
+            className={`py-3 px-3 font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'company'
                 ? 'border-zinc-900 text-zinc-900'
                 : 'border-transparent text-zinc-500 hover:text-zinc-800'
@@ -92,8 +96,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab('presets')}
+            className={`py-3 px-3 font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === 'presets'
+                ? 'border-zinc-900 text-zinc-900'
+                : 'border-transparent text-zinc-500 hover:text-zinc-800'
+            }`}
+          >
+            <ListPlus className="w-4 h-4 text-indigo-600" />
+            <span>ตั้งค่ารายการสินค้า/บริการ</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('rooms')}
+            className={`py-3 px-3 font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              activeTab === 'rooms'
+                ? 'border-zinc-900 text-zinc-900'
+                : 'border-transparent text-zinc-500 hover:text-zinc-800'
+            }`}
+          >
+            <Hotel className="w-4 h-4 text-amber-600" />
+            <span>ตั้งค่าห้องพัก & สาขา (CF)</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('payment')}
-            className={`py-3 px-3 font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
+            className={`py-3 px-3 font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'payment'
                 ? 'border-zinc-900 text-zinc-900'
                 : 'border-transparent text-zinc-500 hover:text-zinc-800'
@@ -105,7 +133,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <button
             onClick={() => setActiveTab('terms')}
-            className={`py-3 px-3 font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
+            className={`py-3 px-3 font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'terms'
                 ? 'border-zinc-900 text-zinc-900'
                 : 'border-transparent text-zinc-500 hover:text-zinc-800'
@@ -270,6 +298,68 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="w-full text-xs px-3 py-2 border border-zinc-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-900"
                   />
                 </div>
+
+                {/* Signature Image Upload */}
+                <div className="md:col-span-2 bg-zinc-50 p-4 rounded-xl border border-zinc-200/80">
+                  <label className="block font-semibold text-zinc-700 mb-2">
+                    รูปลายเซ็นดิจิทัลสำหรับผู้มีอำนาจลงนาม (Authorized Signature Image)
+                  </label>
+                  <div className="flex items-center gap-4">
+                    {settings.signatureImageUrl ? (
+                      <div className="relative group bg-white border border-zinc-200 rounded-lg p-2 w-44 h-16 flex items-center justify-center">
+                        <img
+                          src={settings.signatureImageUrl}
+                          alt="Signature Preview"
+                          className="max-h-full max-w-full object-contain"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSettings({ ...settings, signatureImageUrl: '' })}
+                          className="absolute -top-2 -right-2 p-1 bg-rose-600 text-white rounded-full shadow hover:bg-rose-700 transition-colors"
+                          title="ลบลายเซ็น"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-44 h-16 rounded-lg border-2 border-dashed border-zinc-300 flex items-center justify-center text-zinc-400 bg-white">
+                        <span className="text-[11px]">ยังไม่มีรูปลายเซ็น</span>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium rounded-lg cursor-pointer transition-colors text-xs">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>อัปโหลดรูปลายเซ็น</span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 2 * 1024 * 1024) {
+                                alert('กรุณาเลือกไฟล์ภาพลายเซ็นขนาดไม่เกิน 2MB');
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                setSettings({
+                                  ...settings,
+                                  signatureImageUrl: event.target?.result as string,
+                                });
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      <p className="text-[11px] text-zinc-400">
+                        แนะนำภาพพื้นหลังโปร่งใส (PNG) ความกว้างประมาณ 200-400px
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -323,7 +413,358 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
           )}
+          {/* Presets Tab: Preset Line Items */}
+          {activeTab === 'presets' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-zinc-200 pb-2">
+                <div>
+                  <h3 className="font-bold text-zinc-900 text-sm">
+                    รายการสินค้า / บริการที่ใช้บ่อย (Preset Line Items)
+                  </h3>
+                  <p className="text-zinc-500 text-xs">
+                    ตั้งค่ารายการไว้ล่วงหน้าเพื่อเลือกจาก Dropdown ในหน้าออกเอกสารได้ทันที
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newItem = {
+                      id: `pre-${Date.now()}`,
+                      name: '',
+                      description: '',
+                      unit: 'รายการ',
+                      unitPrice: 0,
+                    };
+                    setSettings({
+                      ...settings,
+                      presetItems: [...(settings.presetItems || []), newItem],
+                    });
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>เพิ่มรายการแม่แบบ</span>
+                </button>
+              </div>
 
+              <div className="space-y-3">
+                {(settings.presetItems || []).map((item, index) => (
+                  <div
+                    key={item.id || index}
+                    className="p-3 bg-zinc-50 rounded-xl border border-zinc-200/80 grid grid-cols-1 md:grid-cols-12 gap-3 items-start"
+                  >
+                    <div className="md:col-span-4">
+                      <label className="block text-[11px] font-semibold text-zinc-700 mb-1">
+                        ชื่อรายการสินค้า / บริการ <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={item.name}
+                        onChange={(e) => {
+                          const updated = [...(settings.presetItems || [])];
+                          updated[index] = { ...updated[index], name: e.target.value };
+                          setSettings({ ...settings, presetItems: updated });
+                        }}
+                        placeholder="เช่น ค่าห้องพัก Deluxe Villa"
+                        className="w-full text-xs px-2.5 py-1.5 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                      />
+                    </div>
+
+                    <div className="md:col-span-4">
+                      <label className="block text-[11px] font-semibold text-zinc-700 mb-1">
+                        รายละเอียดเพิ่มเติม
+                      </label>
+                      <input
+                        type="text"
+                        value={item.description || ''}
+                        onChange={(e) => {
+                          const updated = [...(settings.presetItems || [])];
+                          updated[index] = { ...updated[index], description: e.target.value };
+                          setSettings({ ...settings, presetItems: updated });
+                        }}
+                        placeholder="คำอธิบายย่อยที่จะแสดงในใบเสร็จ/ใบแจ้งหนี้"
+                        className="w-full text-xs px-2.5 py-1.5 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] font-semibold text-zinc-700 mb-1">หน่วย</label>
+                      <input
+                        type="text"
+                        value={item.unit}
+                        onChange={(e) => {
+                          const updated = [...(settings.presetItems || [])];
+                          updated[index] = { ...updated[index], unit: e.target.value };
+                          setSettings({ ...settings, presetItems: updated });
+                        }}
+                        placeholder="คืน, ชุด, รายการ"
+                        className="w-full text-xs text-center px-2 py-1.5 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2 flex items-end gap-2">
+                      <div className="flex-1">
+                        <label className="block text-[11px] font-semibold text-zinc-700 mb-1">
+                          ราคา/หน่วย
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={item.unitPrice}
+                          onChange={(e) => {
+                            const updated = [...(settings.presetItems || [])];
+                            updated[index] = {
+                              ...updated[index],
+                              unitPrice: parseFloat(e.target.value) || 0,
+                            };
+                            setSettings({ ...settings, presetItems: updated });
+                          }}
+                          className="w-full text-xs text-right font-mono px-2 py-1.5 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = settings.presetItems.filter((_, i) => i !== index);
+                          setSettings({ ...settings, presetItems: updated });
+                        }}
+                        className="p-2 text-zinc-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer"
+                        title="ลบรายการนี้"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {(!settings.presetItems || settings.presetItems.length === 0) && (
+                  <div className="p-8 text-center text-zinc-400 border border-dashed border-zinc-200 rounded-xl bg-zinc-50">
+                    ยังไม่มีรายการแม่แบบ คลิก "เพิ่มรายการแม่แบบ" เพื่อสร้างรายการเริ่มต้น
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Rooms Tab: Room Types linked with Room Numbers, and Hotel Branches */}
+          {activeTab === 'rooms' && (
+            <div className="space-y-6">
+              {/* Hotel Branches Management */}
+              <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold text-zinc-900 text-xs">
+                      สาขาของที่พัก / กิจการ (Branches)
+                    </h4>
+                    <p className="text-zinc-500 text-[11px]">
+                      สำหรับแสดงเป็นตัวเลือก Dropdown ในใบยืนยันการจองห้องพัก (CF)
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updatedBranches = [...(settings.branches || []), ''];
+                      setSettings({ ...settings, branches: updatedBranches });
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-zinc-300 hover:bg-zinc-100 rounded text-xs font-medium cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>เพิ่มสาขา</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {(settings.branches || []).map((branch, bIdx) => (
+                    <div key={bIdx} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={branch}
+                        onChange={(e) => {
+                          const updated = [...(settings.branches || [])];
+                          updated[bIdx] = e.target.value;
+                          setSettings({ ...settings, branches: updated });
+                        }}
+                        placeholder="เช่น สาขาแม่ริม (สำนักงานใหญ่)"
+                        className="flex-1 text-xs px-3 py-1.5 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = settings.branches.filter((_, i) => i !== bIdx);
+                          setSettings({ ...settings, branches: updated });
+                        }}
+                        className="p-1.5 text-zinc-400 hover:text-rose-600 rounded cursor-pointer"
+                        title="ลบสาขา"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Room Types & Linked Room Numbers */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-zinc-200 pb-2">
+                  <div>
+                    <h4 className="font-bold text-zinc-900 text-sm">
+                      ประเภทห้องพักและหมายเลขห้องที่ลิงก์กัน (Room Types & Linked Room Numbers)
+                    </h4>
+                    <p className="text-zinc-500 text-xs">
+                      เมื่อเลือกประเภทห้องในใบจอง CF ระบบจะดึงหมายเลขห้องที่สังกัดประเภทนั้นมาให้เลือกทันที
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newRt = {
+                        id: `rt-${Date.now()}`,
+                        name: '',
+                        defaultPrice: 0,
+                        roomNumbers: [''],
+                      };
+                      setSettings({
+                        ...settings,
+                        presetRoomTypes: [...(settings.presetRoomTypes || []), newRt],
+                      });
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>เพิ่มประเภทห้องพัก</span>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {(settings.presetRoomTypes || []).map((rt, rtIdx) => (
+                    <div
+                      key={rt.id || rtIdx}
+                      className="p-4 bg-amber-50/40 rounded-xl border border-amber-200 space-y-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-zinc-700 mb-1">
+                              ชื่อประเภทห้องพัก <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={rt.name}
+                              onChange={(e) => {
+                                const updated = [...(settings.presetRoomTypes || [])];
+                                updated[rtIdx] = { ...updated[rtIdx], name: e.target.value };
+                                setSettings({ ...settings, presetRoomTypes: updated });
+                              }}
+                              placeholder="เช่น Deluxe Villa, Suite, Standard"
+                              className="w-full text-xs px-2.5 py-1.5 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-zinc-700 mb-1">
+                              ราคาเริ่มต้น (บาท/คืน)
+                            </label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={rt.defaultPrice || 0}
+                              onChange={(e) => {
+                                const updated = [...(settings.presetRoomTypes || [])];
+                                updated[rtIdx] = {
+                                  ...updated[rtIdx],
+                                  defaultPrice: parseFloat(e.target.value) || 0,
+                                };
+                                setSettings({ ...settings, presetRoomTypes: updated });
+                              }}
+                              className="w-full text-xs font-mono px-2.5 py-1.5 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = settings.presetRoomTypes.filter((_, i) => i !== rtIdx);
+                            setSettings({ ...settings, presetRoomTypes: updated });
+                          }}
+                          className="p-2 text-zinc-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer"
+                          title="ลบประเภทห้องพักนี้"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Linked Room Numbers */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-[11px] font-semibold text-zinc-700">
+                            หมายเลขห้องพักที่สังกัดประเภทนี้ (เช่น 101, 102, Villa A):
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = [...(settings.presetRoomTypes || [])];
+                              updated[rtIdx] = {
+                                ...updated[rtIdx],
+                                roomNumbers: [...(updated[rtIdx].roomNumbers || []), ''],
+                              };
+                              setSettings({ ...settings, presetRoomTypes: updated });
+                            }}
+                            className="text-[11px] text-amber-700 hover:text-amber-900 flex items-center gap-0.5 cursor-pointer font-medium"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>เพิ่มหมายเลขห้อง</span>
+                          </button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {(rt.roomNumbers || []).map((rn, rnIdx) => (
+                            <div
+                              key={rnIdx}
+                              className="flex items-center gap-1 bg-white border border-zinc-200 px-2 py-1 rounded-md"
+                            >
+                              <input
+                                type="text"
+                                value={rn}
+                                onChange={(e) => {
+                                  const updated = [...(settings.presetRoomTypes || [])];
+                                  const currentNumbers = [...(updated[rtIdx].roomNumbers || [])];
+                                  currentNumbers[rnIdx] = e.target.value;
+                                  updated[rtIdx] = {
+                                    ...updated[rtIdx],
+                                    roomNumbers: currentNumbers,
+                                  };
+                                  setSettings({ ...settings, presetRoomTypes: updated });
+                                }}
+                                placeholder="101"
+                                className="w-20 text-xs text-center font-mono focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = [...(settings.presetRoomTypes || [])];
+                                  updated[rtIdx] = {
+                                    ...updated[rtIdx],
+                                    roomNumbers: updated[rtIdx].roomNumbers.filter(
+                                      (_, i) => i !== rnIdx
+                                    ),
+                                  };
+                                  setSettings({ ...settings, presetRoomTypes: updated });
+                                }}
+                                className="text-zinc-400 hover:text-rose-600 cursor-pointer"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
           {activeTab === 'terms' && (
             <div className="space-y-6">
               {(['RC', 'QT', 'IN', 'CF'] as DocType[]).map((type) => {

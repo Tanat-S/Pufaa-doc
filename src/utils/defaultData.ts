@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: CompanySettings = {
   promptPayNo: '0505562019941',
   signatureName: 'นายณัฐพงษ์ เจริญทรัพย์',
   signatureTitle: 'ผู้จัดการทั่วไป (General Manager)',
+  signatureImageUrl: '',
   defaultNotes: {
     RC: 'ขอบคุณที่ใช้บริการ เอกสารนี้สมบูรณ์เมื่อได้รับการชำระเงินเรียบร้อยแล้ว',
     QT: 'ราคาดังกล่าวรวมค่าบริการและภาษีตามที่ระบุ ยืนยันราคาภายใน 15 วันนับจากวันที่ออกเอกสาร',
@@ -28,6 +29,81 @@ export const DEFAULT_SETTINGS: CompanySettings = {
     IN: 'กำหนดชำระเงินภายใน 7 วัน นับจากวันที่ได้รับใบแจ้งหนี้',
     CF: 'กรณีต้องการเลื่อนวันเข้าพัก กรุณาแจ้งล่วงหน้าอย่างน้อย 7 วัน มิฉะนั้นขอสงวนสิทธิ์ในการคืนเงินมัดจำ',
   },
+  branches: [
+    'สาขาแม่ริม (สำนักงานใหญ่)',
+    'สาขานิมมานเหมินท์',
+    'สาขาหางดง',
+  ],
+  presetItems: [
+    {
+      id: 'pre-1',
+      name: 'Deluxe Pool Villa',
+      description: 'วิลล่าพร้อมสระว่ายน้ำส่วนตัว วิวดอยแม่ริม',
+      unit: 'คืน',
+      unitPrice: 5500,
+    },
+    {
+      id: 'pre-2',
+      name: 'Mountain View Suite',
+      description: 'ห้องสวีทวิวภูเขา เตียงคิงไซส์ ระเบียงกว้าง',
+      unit: 'คืน',
+      unitPrice: 3800,
+    },
+    {
+      id: 'pre-3',
+      name: 'Standard Room',
+      description: 'ห้องพักมาตรฐาน สิ่งอำนวยความสะดวกครบครัน',
+      unit: 'คืน',
+      unitPrice: 2200,
+    },
+    {
+      id: 'pre-4',
+      name: 'เตียงเสริม Extra Bed',
+      description: 'เตียงเสริมพิเศษพร้อมชุดเครื่องนอนคุณภาพสูง',
+      unit: 'คืน',
+      unitPrice: 800,
+    },
+    {
+      id: 'pre-5',
+      name: 'แพ็กเกจจัดงานสัมมนา Full Day',
+      description: 'ห้องประชุม อุปกรณ์โปรเจคเตอร์ และระบบเครื่องเสียง',
+      unit: 'วัน',
+      unitPrice: 25000,
+    },
+    {
+      id: 'pre-6',
+      name: 'อาหารว่าง Coffee Break',
+      description: 'ขนมเบเกอรี่ ชา กาแฟสด ผลไม้ตามฤดูกาล',
+      unit: 'ท่าน',
+      unitPrice: 250,
+    },
+  ],
+  presetRoomTypes: [
+    {
+      id: 'rt-1',
+      name: 'Deluxe Pool Villa',
+      defaultPrice: 5500,
+      roomNumbers: ['Villa 101', 'Villa 102', 'Villa 103', 'Villa 104'],
+    },
+    {
+      id: 'rt-2',
+      name: 'Mountain View Suite',
+      defaultPrice: 3800,
+      roomNumbers: ['Room 201', 'Room 202', 'Room 203', 'Room 204'],
+    },
+    {
+      id: 'rt-3',
+      name: 'Standard Room',
+      defaultPrice: 2200,
+      roomNumbers: ['Room 301', 'Room 302', 'Room 303', 'Room 304', 'Room 305'],
+    },
+    {
+      id: 'rt-4',
+      name: 'Family Villa (2 Bedrooms)',
+      defaultPrice: 8500,
+      roomNumbers: ['Villa 501', 'Villa 502'],
+    },
+  ],
 };
 
 export const INITIAL_DOCUMENTS: DocumentData[] = [
@@ -36,6 +112,7 @@ export const INITIAL_DOCUMENTS: DocumentData[] = [
     docType: 'RC',
     docNumber: 'RC2026-001',
     date: '2026-10-25',
+    signatureDate: '2026-10-25',
     customer: {
       name: 'คุณสมชาย พงษ์ศิริ',
       phone: '089-111-2222',
@@ -87,6 +164,7 @@ export const INITIAL_DOCUMENTS: DocumentData[] = [
     docNumber: 'QT2026-001',
     date: '2026-10-26',
     dueDate: '2026-11-10',
+    signatureDate: '2026-10-26',
     customer: {
       name: 'บริษัท สยาม ครีเอทีฟ มีเดีย จำกัด',
       taxId: '0105558098765',
@@ -139,6 +217,7 @@ export const INITIAL_DOCUMENTS: DocumentData[] = [
     docNumber: 'IN2026-001',
     date: '2026-10-27',
     dueDate: '2026-11-03',
+    signatureDate: '2026-10-27',
     customer: {
       name: 'หจก. ทัวร์ริสซึ่ม เอ็กซ์เพรส',
       taxId: '0503561004321',
@@ -179,6 +258,7 @@ export const INITIAL_DOCUMENTS: DocumentData[] = [
     docType: 'CF',
     docNumber: 'CF2026-001',
     date: '2026-10-27',
+    signatureDate: '2026-10-27',
     customer: {
       name: 'คุณพัชราภรณ์ วงศ์สว่าง',
       phone: '084-555-6677',
@@ -186,16 +266,32 @@ export const INITIAL_DOCUMENTS: DocumentData[] = [
       address: '55/12 แขวงจตุจักร เขตจตุจักร กรุงเทพฯ 10900',
     },
     booking: {
-      roomType: 'Mountain View Deluxe Pool Villa',
-      roomNumber: 'Villa 102',
+      branch: 'สาขาแม่ริม (สำนักงานใหญ่)',
+      roomType: 'Mountain View Deluxe Pool Villa (1 หลัง), Standard Suite (1 ห้อง)',
+      roomNumber: 'Villa 102, Room 204',
+      rooms: [
+        {
+          id: 'room-1',
+          roomType: 'Deluxe Pool Villa',
+          roomNumber: 'Villa 102',
+          quantity: 1,
+          note: 'ขอเตียงคู่ และขอเช็คอินเร็ว',
+        },
+        {
+          id: 'room-2',
+          roomType: 'Mountain View Suite',
+          roomNumber: 'Room 204',
+          quantity: 1,
+          note: 'ห้องชั้นบนปลอดบุหรี่',
+        },
+      ],
       checkInDate: '2026-11-15',
       checkInTime: '14:00 น.',
       checkOutDate: '2026-11-18',
       checkOutTime: '12:00 น.',
       nights: 3,
-      adults: 2,
+      adults: 3,
       children: 1,
-      mealPlan: 'รวมอาหารเช้าทุกมื้อ (Daily Breakfast Buffet)',
     },
     items: [
       {

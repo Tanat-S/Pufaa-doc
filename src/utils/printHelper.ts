@@ -32,16 +32,21 @@ export function buildDocumentHtml(
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
     body {
-      font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 12px;
-      line-height: 1.4;
+      line-height: 1.45;
       color: #18181b;
       background: #ffffff;
-      padding: 20px;
+      padding: 20px 24px;
       width: 794px;
       margin: 0 auto;
+      text-rendering: geometricPrecision;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
     .header {
       display: flex;
@@ -299,16 +304,54 @@ export function buildDocumentHtml(
     doc.docType === 'CF' && doc.booking
       ? `
     <div class="booking-card">
-      <div style="font-weight: 700; color: #92400e; margin-bottom: 4px;">รายละเอียดการจองห้องพัก</div>
-      <div class="booking-grid">
-        <div>
-          <span class="booking-field-label">ประเภทห้อง:</span><br>
-          <span class="booking-field-val">${doc.booking.roomType || '-'}</span>
-        </div>
-        <div>
-          <span class="booking-field-label">หมายเลขห้อง:</span><br>
-          <span class="booking-field-val">${doc.booking.roomNumber || '-'}</span>
-        </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <div style="font-weight: 700; color: #92400e;">รายละเอียดการจองห้องพัก (Reservation Details)</div>
+        ${doc.booking.branch ? `<div style="font-size: 11px; color: #78350f; font-weight: 600; background: #fef3c7; padding: 2px 8px; border-radius: 4px;">สาขา: ${doc.booking.branch}</div>` : ''}
+      </div>
+
+      ${
+        doc.booking.rooms && doc.booking.rooms.length > 0
+          ? `
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 10.5px; background: #ffffff; border: 1px solid #fde68a;">
+          <thead>
+            <tr style="background: #fef3c7; color: #78350f; font-weight: 600;">
+              <th style="padding: 4px 6px; width: 25px; text-align: center; border-bottom: 1px solid #fde68a;">#</th>
+              <th style="padding: 4px 6px; text-align: left; border-bottom: 1px solid #fde68a;">ประเภทห้องพัก</th>
+              <th style="padding: 4px 6px; text-align: left; border-bottom: 1px solid #fde68a;">หมายเลขห้อง</th>
+              <th style="padding: 4px 6px; text-align: center; width: 60px; border-bottom: 1px solid #fde68a;">จำนวน</th>
+              <th style="padding: 4px 6px; text-align: left; border-bottom: 1px solid #fde68a;">หมายเหตุ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${doc.booking.rooms
+              .map(
+                (r, i) => `
+              <tr style="border-bottom: 1px solid #fef3c7;">
+                <td style="padding: 4px 6px; text-align: center; color: #a1a1aa;">${i + 1}</td>
+                <td style="padding: 4px 6px; font-weight: 600; color: #1c1917;">${r.roomType || '-'}</td>
+                <td style="padding: 4px 6px; font-weight: 500; color: #78350f;">${r.roomNumber || '-'}</td>
+                <td style="padding: 4px 6px; text-align: center;">${r.quantity || 1} ห้อง</td>
+                <td style="padding: 4px 6px; color: #71717a;">${r.note || '-'}</td>
+              </tr>
+            `
+              )
+              .join('')}
+          </tbody>
+        </table>`
+          : `
+        <div class="booking-grid" style="margin-bottom: 8px;">
+          <div style="grid-column: span 2;">
+            <span class="booking-field-label">ประเภทห้องพัก:</span><br>
+            <span class="booking-field-val">${(doc.booking.roomType || '-').replace(/\n/g, '<br>')}</span>
+          </div>
+          <div style="grid-column: span 2;">
+            <span class="booking-field-label">หมายเลขห้อง:</span><br>
+            <span class="booking-field-val">${(doc.booking.roomNumber || '-').replace(/\n/g, '<br>')}</span>
+          </div>
+        </div>`
+      }
+
+      <div class="booking-grid" style="border-top: 1px solid #fde68a; padding-top: 6px;">
         <div>
           <span class="booking-field-label">วันเช็คอิน:</span><br>
           <span class="booking-field-val">${doc.booking.checkInDate || '-'} ${doc.booking.checkInTime || ''}</span>
@@ -318,16 +361,12 @@ export function buildDocumentHtml(
           <span class="booking-field-val">${doc.booking.checkOutDate || '-'} ${doc.booking.checkOutTime || ''}</span>
         </div>
         <div>
-          <span class="booking-field-label">จำนวนคืน:</span><br>
+          <span class="booking-field-label">จำนวนคืนทั้งหมด:</span><br>
           <span class="booking-field-val">${doc.booking.nights || 1} คืน</span>
         </div>
         <div>
           <span class="booking-field-label">ผู้เข้าพัก:</span><br>
           <span class="booking-field-val">ผู้ใหญ่ ${doc.booking.adults || 1} ท่าน ${doc.booking.children ? `, เด็ก ${doc.booking.children} ท่าน` : ''}</span>
-        </div>
-        <div style="grid-column: span 2;">
-          <span class="booking-field-label">แผนอาหาร:</span><br>
-          <span class="booking-field-val">${doc.booking.mealPlan || '-'}</span>
         </div>
       </div>
     </div>`
@@ -444,10 +483,19 @@ export function buildDocumentHtml(
     </div>
     <div>
       <div>ผู้มีอำนาจลงนาม / พนักงาน</div>
-      <div class="sig-line"></div>
-      <div style="color: #18181b; font-weight: 500;">(${settings.signatureName || '...................................................'})</div>
+      <div style="height: 50px; display: flex; align-items: flex-end; justify-content: center;">
+        ${
+          doc.showSignature !== false && settings.signatureImageUrl
+            ? `<img src="${settings.signatureImageUrl}" style="max-height: 48px; max-width: 160px; object-contain: contain; margin-bottom: 2px;" />`
+            : doc.showSignature !== false && settings.signatureName
+            ? `<span style="color: #18181b; font-weight: 600; font-size: 11px;">${settings.signatureName}</span>`
+            : ''
+        }
+      </div>
+      <div class="sig-line" style="margin-top: 2px;"></div>
+      <div style="color: #18181b; font-weight: 500;">(${doc.showSignature !== false && settings.signatureName ? settings.signatureName : '...................................................'})</div>
       ${settings.signatureTitle ? `<div style="color: #71717a; font-size: 10px;">${settings.signatureTitle}</div>` : ''}
-      <div style="color: #a1a1aa; font-size: 10px; margin-top: 2px;">วันที่ ......./......./...........</div>
+      <div style="color: #a1a1aa; font-size: 10px; margin-top: 2px;">วันที่ ${doc.signatureDate || '......./......./...........'}</div>
     </div>
   </div>
 

@@ -171,21 +171,67 @@ export const DocumentPaper: React.FC<DocumentPaperProps> = ({
         {/* Booking Details Specific Section for CF */}
         {doc.docType === 'CF' && doc.booking && (
           <div className="mb-5 bg-amber-50/60 border border-amber-200/80 rounded p-4 text-xs">
-            <div className="flex items-center gap-2 mb-2 border-b border-amber-200/50 pb-2">
-              <Calendar className="w-4 h-4 text-amber-700" />
-              <h3 className="font-bold text-amber-900 text-sm">
-                รายละเอียดการจองห้องพัก (Reservation Details)
-              </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2.5 border-b border-amber-200/50 pb-2">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-amber-700" />
+                <h3 className="font-bold text-amber-900 text-sm">
+                  รายละเอียดการจองห้องพัก (Reservation Details)
+                </h3>
+              </div>
+              {doc.booking.branch && (
+                <span className="inline-flex items-center gap-1 font-semibold text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded text-[11px]">
+                  <span>สาขา:</span>
+                  <span>{doc.booking.branch}</span>
+                </span>
+              )}
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-zinc-800">
-              <div>
-                <span className="text-zinc-500 block text-[11px]">ประเภทห้อง:</span>
-                <span className="font-bold text-zinc-900">{doc.booking.roomType || '-'}</span>
+
+            {/* Room rows table if multiple rooms exist, otherwise fallback grid */}
+            {doc.booking.rooms && doc.booking.rooms.length > 0 ? (
+              <div className="mb-3 overflow-x-auto">
+                <table className="w-full text-left border-collapse border border-amber-200 bg-white rounded">
+                  <thead>
+                    <tr className="bg-amber-100/60 text-amber-900 text-[11px] font-semibold border-b border-amber-200">
+                      <th className="py-1.5 px-2 w-8 text-center">#</th>
+                      <th className="py-1.5 px-2">ประเภทห้องพัก (Room Type)</th>
+                      <th className="py-1.5 px-2">หมายเลขห้อง</th>
+                      <th className="py-1.5 px-2 w-16 text-center">จำนวน</th>
+                      <th className="py-1.5 px-2">หมายเหตุ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-amber-100 text-zinc-800 text-[11px]">
+                    {doc.booking.rooms.map((room, rIdx) => (
+                      <tr key={room.id || rIdx}>
+                        <td className="py-1.5 px-2 text-center text-zinc-400 font-mono">{rIdx + 1}</td>
+                        <td className="py-1.5 px-2 font-bold text-zinc-900">{room.roomType || '-'}</td>
+                        <td className="py-1.5 px-2 font-mono font-medium text-amber-900">
+                          {room.roomNumber || '-'}
+                        </td>
+                        <td className="py-1.5 px-2 text-center font-mono">{room.quantity || 1} ห้อง</td>
+                        <td className="py-1.5 px-2 text-zinc-500">{room.note || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div>
-                <span className="text-zinc-500 block text-[11px]">หมายเลขห้อง:</span>
-                <span className="font-semibold text-zinc-900">{doc.booking.roomNumber || '-'}</span>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-zinc-800 mb-3">
+                <div className="col-span-2">
+                  <span className="text-zinc-500 block text-[11px]">ประเภทห้องพัก:</span>
+                  <span className="font-bold text-zinc-900 whitespace-pre-line leading-relaxed">
+                    {doc.booking.roomType || '-'}
+                  </span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-zinc-500 block text-[11px]">หมายเลขห้อง:</span>
+                  <span className="font-semibold text-zinc-900 whitespace-pre-line">
+                    {doc.booking.roomNumber || '-'}
+                  </span>
+                </div>
               </div>
+            )}
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-zinc-800 border-t border-amber-200/50 pt-2.5">
               <div>
                 <span className="text-zinc-500 block text-[11px]">วันและเวลาเช็คอิน:</span>
                 <span className="font-semibold text-zinc-900">
@@ -199,7 +245,7 @@ export const DocumentPaper: React.FC<DocumentPaperProps> = ({
                 </span>
               </div>
               <div>
-                <span className="text-zinc-500 block text-[11px]">จำนวนคืน:</span>
+                <span className="text-zinc-500 block text-[11px]">จำนวนคืนทั้งหมด:</span>
                 <span className="font-bold text-amber-900">{doc.booking.nights || 1} คืน</span>
               </div>
               <div>
@@ -208,10 +254,6 @@ export const DocumentPaper: React.FC<DocumentPaperProps> = ({
                   ผู้ใหญ่ {doc.booking.adults || 1} ท่าน
                   {doc.booking.children ? `, เด็ก ${doc.booking.children} ท่าน` : ''}
                 </span>
-              </div>
-              <div className="col-span-2">
-                <span className="text-zinc-500 block text-[11px]">แผนอาหาร:</span>
-                <span className="font-medium text-zinc-900">{doc.booking.mealPlan || 'ไม่รวมอาหารเช้า'}</span>
               </div>
             </div>
           </div>
@@ -250,7 +292,7 @@ export const DocumentPaper: React.FC<DocumentPaperProps> = ({
                     <td className="py-2.5 px-3 text-right font-mono text-zinc-500">
                       {item.discount > 0 ? formatCurrency(item.discount) : '-'}
                     </td>
-                    <td className="py-2.5 px-3 text-right font-mono font-semibold text-zinc-900">
+                    <td className={`py-2.5 px-3 text-right font-mono font-semibold ${item.amount < 0 ? 'text-rose-600' : 'text-zinc-900'}`}>
                       {formatCurrency(item.amount)}
                     </td>
                   </tr>
@@ -390,15 +432,27 @@ export const DocumentPaper: React.FC<DocumentPaperProps> = ({
 
         <div className="text-center space-y-3">
           <p className="font-medium text-zinc-700">ผู้มีอำนาจลงนาม / พนักงานผู้ออกเอกสาร</p>
-          <div className="h-14 border-b border-zinc-300 border-dashed w-48 mx-auto flex items-end justify-center pb-1">
-            {settings.signatureName && (
+          <div className="h-14 border-b border-zinc-300 border-dashed w-48 mx-auto flex items-end justify-center pb-1 relative">
+            {doc.showSignature !== false && settings.signatureImageUrl ? (
+              <img
+                src={settings.signatureImageUrl}
+                alt="Authorized Signature"
+                className="max-h-14 max-w-[170px] object-contain mb-1"
+              />
+            ) : doc.showSignature !== false && settings.signatureName ? (
               <span className="font-medium text-zinc-800 text-[11px]">{settings.signatureName}</span>
-            )}
+            ) : null}
           </div>
           <div className="text-zinc-500 text-[11px] space-y-0.5">
-            <p>({settings.signatureName || '..........................................................'})</p>
+            <p>
+              (
+              {doc.showSignature !== false && settings.signatureName
+                ? settings.signatureName
+                : '..........................................................'}
+              )
+            </p>
             {settings.signatureTitle && <p className="text-[10px] text-zinc-400">{settings.signatureTitle}</p>}
-            <p>วันที่ ......./......./...........</p>
+            <p>วันที่ {doc.signatureDate || '......./......./...........'}</p>
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   BookingDetails,
+  BookingRoomItem,
   CompanySettings,
   DocItem,
   DocStatus,
@@ -78,20 +79,46 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({
     }
   );
 
-  // Booking details for CF
+  // Booking details for CF (with dynamic room rows and branch)
+  const initialRooms: BookingRoomItem[] =
+    initialDocument?.booking?.rooms && initialDocument.booking.rooms.length > 0
+      ? initialDocument.booking.rooms
+      : [
+          {
+            id: 'room-1',
+            roomType:
+              initialDocument?.booking?.roomType ||
+              settings.presetRoomTypes?.[0]?.name ||
+              'Deluxe Room',
+            roomNumber:
+              initialDocument?.booking?.roomNumber ||
+              settings.presetRoomTypes?.[0]?.roomNumbers?.[0] ||
+              '101',
+            quantity: 1,
+            note: '',
+          },
+        ];
+
   const [booking, setBooking] = useState<BookingDetails>(
-    initialDocument?.booking || {
-      roomType: 'Deluxe Room',
-      roomNumber: '101',
-      checkInDate: new Date().toISOString().split('T')[0],
-      checkInTime: '14:00 น.',
-      checkOutDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-      checkOutTime: '12:00 น.',
-      nights: 1,
-      adults: 2,
-      children: 0,
-      mealPlan: 'รวมอาหารเช้า (Breakfast Included)',
-    }
+    initialDocument?.booking
+      ? {
+          ...initialDocument.booking,
+          branch: initialDocument.booking.branch || settings.branches?.[0] || 'สาขาใหญ่ (สำนักงานใหญ่)',
+          rooms: initialRooms,
+        }
+      : {
+          branch: settings.branches?.[0] || 'สาขาใหญ่ (สำนักงานใหญ่)',
+          roomType: settings.presetRoomTypes?.[0]?.name || 'Deluxe Room',
+          roomNumber: settings.presetRoomTypes?.[0]?.roomNumbers?.[0] || '101',
+          rooms: initialRooms,
+          checkInDate: new Date().toISOString().split('T')[0],
+          checkInTime: '14:00 น.',
+          checkOutDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+          checkOutTime: '12:00 น.',
+          nights: 1,
+          adults: 2,
+          children: 0,
+        }
   );
 
   // Items
@@ -115,6 +142,10 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({
   const [vatEnabled, setVatEnabled] = useState<boolean>(initialDocument?.vatEnabled ?? true);
   const [vatRate, setVatRate] = useState<number>(initialDocument?.vatRate ?? 7);
   const [paidAmount, setPaidAmount] = useState<number>(initialDocument?.paidAmount ?? 0);
+  const [showSignature, setShowSignature] = useState<boolean>(initialDocument?.showSignature ?? true);
+  const [signatureDate, setSignatureDate] = useState<string>(
+    initialDocument?.signatureDate || initialDocument?.date || new Date().toISOString().split('T')[0]
+  );
 
   // Free-form notes and payment terms
   const [notes, setNotes] = useState<string>(
@@ -134,26 +165,114 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({
     }
   };
 
-  // Re-calculate financial totals whenever items, discount, or VAT changes
+  // Dynamic Room Items Management
+  const addBookingRoom = () => {
+    const defaultType = settings.presetRoomTypes?.[0]?.name || 'Deluxe Room';
+    const defaultNum = settings.presetRoomTypes?.[0]?.roomNumbers?.[0] || '101';
+    const newRoom: BookingRoomItem = {
+      id: `room-${Date.now()}`,
+      roomType: defaultType,
+      roomNumber: defaultNum,
+      quantity: 1,
+      note: '',
+    };
+    const updatedRooms = [...(booking.rooms || []), newRoom];
+    setBooking({
+      ...booking,
+      rooms: updatedRooms,
+      roomType: updatedRooms.map((r) => `${r.roomType}${(r.quantity || 1) > 1 ? ` x${r.quantity}` : ''}`).join(', '),
+      roomNumber: updatedRooms.map((r) => r.roomNumber).filter(Boolean).join(', '),
+    });
+  };
+
+  const updateBookingRoom = (index: number, field: keyof BookingRoomItem, value: any) => {
+    const updatedRooms = [...(booking.rooms || [])];
+    const item = { ...updatedRooms[index], [field]: value };
+
+    // When room type changes, if roomNumber is empty or belongs to previous room type, auto-suggest first room number
+    if (field === 'roomType') {
+      const foundType = settings.presetRoomTypes?.find((rt) => rt.name === value);
+      if (foundType && foundType.roomNumbers?.length > 0) {
+        item.roomNumber = foundType.roomNumbers[0];
+      }
+    }
+
+    updatedRooms[index] = item;
+    setBooking({
+      ...booking,
+      rooms: updatedRooms,
+      roomType: updatedRooms.map((r) => `${r.roomType}${(r.quantity || 1) > 1 ? ` x${r.quantity}` : ''}`).join(', '),
+      roomNumber: updatedRooms.map((r) => r.roomNumber).filter(Boolean).join(', '),
+    });
+  };
+
+  const removeBookingRoom = (index: number) => {
+    if ((booking.rooms || []).length <= 1) return;
+    const updatedRooms = (booking.rooms || []).filter((_, i) => i !== index);
+    setBooking({
+      ...booking,
+      rooms: updatedRooms,
+      roomType: updatedRooms.map((r) => `${r.roomType}${(r.quantity || 1) > 1 ? ` x${r.quantity}` : ''}`).join(', '),
+      roomNumber: updatedRooms.map((r) => r.roomNumber).filter(Boolean).join(', '),
+    });
+  };
+
+  // Preset Item Handlers
+  const addPresetItem = (presetId: string) => {
+    const preset = settings.presetItems?.find((p) => p.id === presetId);
+    if (!preset) return;
+    const newItem: DocItem = {
+      id: String(Date.now()),
+      name: preset.name,
+      description: preset.description || '',
+      quantity: 1,
+      unit: preset.unit || (docType === 'CF' ? 'คืน' : 'รายการ'),
+      unitPrice: preset.unitPrice ?? 0,
+      discount: 0,
+      amount: preset.unitPrice ?? 0,
+    };
+    setItems([...items, newItem]);
+  };
+
+  const applyPresetToItem = (index: number, presetId: string) => {
+    const preset = settings.presetItems?.find((p) => p.id === presetId);
+    if (!preset) return;
+    const updated = [...items];
+    const current = updated[index];
+    const q = current.quantity || 1;
+    const p = preset.unitPrice ?? current.unitPrice;
+    const d = current.discount || 0;
+    updated[index] = {
+      ...current,
+      name: preset.name,
+      description: preset.description || current.description,
+      unit: preset.unit || current.unit,
+      unitPrice: p,
+      amount: q * p - d,
+    };
+    setItems(updated);
+  };
+
+  // Re-calculate financial totals whenever items, discount, or VAT changes (supports negative values)
   const subtotal = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const discountAmount = discountPercent > 0 ? (subtotal * discountPercent) / 100 : 0;
-  const afterDiscount = Math.max(0, subtotal - discountAmount);
+  const afterDiscount = subtotal - discountAmount;
   const vatAmount = vatEnabled ? (afterDiscount * vatRate) / 100 : 0;
   const grandTotal = Math.round((afterDiscount + vatAmount) * 100) / 100;
-  const remainingAmount = Math.max(0, grandTotal - paidAmount);
+  const remainingAmount = grandTotal - paidAmount;
   const bahtText = formatThaiBahtText(grandTotal);
 
-  // Update item field
+  // Update item field (allowing negative numbers for deductions/carried forwards)
   const updateItem = (index: number, field: keyof DocItem, value: any) => {
     const updated = [...items];
     const item = { ...updated[index], [field]: value };
 
-    // auto compute row amount
+    // auto compute row amount (allowing negative results)
     if (field === 'quantity' || field === 'unitPrice' || field === 'discount') {
       const q = field === 'quantity' ? Number(value) || 0 : item.quantity;
       const p = field === 'unitPrice' ? Number(value) || 0 : item.unitPrice;
       const d = field === 'discount' ? Number(value) || 0 : item.discount;
-      item.amount = Math.max(0, q * p - d);
+      item.amount = q * p - d;
     }
 
     updated[index] = item;
@@ -201,6 +320,8 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({
     notes,
     paymentTerms,
     status,
+    showSignature,
+    signatureDate: showSignature ? signatureDate : undefined,
     driveFileId: initialDocument?.driveFileId,
     driveFileUrl: driveLink || initialDocument?.driveFileUrl,
     createdAt: initialDocument?.createdAt || new Date().toISOString(),
@@ -484,98 +605,321 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({
       {/* Special Booking Section for CF (ใบยืนยันการจองห้องพัก) */}
       {docType === 'CF' && (
         <div className="bg-amber-50/50 p-5 rounded-xl border border-amber-200/80 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 border-b border-amber-200/60 pb-2">
-            <Calendar className="w-4 h-4 text-amber-700" />
-            <h3 className="text-xs font-bold text-amber-900 uppercase tracking-wider">
-              ข้อมูลการจองห้องพัก (Reservation Details)
-            </h3>
+          <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-amber-700" />
+              <h3 className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+                ข้อมูลการจองห้องพัก (Reservation Details)
+              </h3>
+            </div>
+            <span className="text-[11px] text-amber-700 font-medium">
+              คำนวณวันเช็คเอาท์และจำนวนคืนให้อัตโนมัติ
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">ประเภทห้องพัก</label>
-              <input
-                type="text"
-                value={booking.roomType}
-                onChange={(e) => setBooking({ ...booking, roomType: e.target.value })}
-                placeholder="เช่น Deluxe Villa, Suite"
-                className="w-full text-sm px-3 py-2 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
+          {/* Branch Selection */}
+          <div className="bg-white/80 p-3 rounded-lg border border-amber-200/90 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <label className="text-xs font-bold text-amber-900 whitespace-nowrap flex items-center gap-1.5">
+                <Building className="w-3.5 h-3.5 text-amber-700" />
+                <span>สาขาที่เข้าพัก (Branch):</span>
+              </label>
+              <div className="flex-1 flex gap-2">
+                {settings.branches && settings.branches.length > 0 && (
+                  <select
+                    value={settings.branches.includes(booking.branch || '') ? booking.branch : ''}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        setBooking({ ...booking, branch: e.target.value });
+                      }
+                    }}
+                    className="text-xs px-2.5 py-1.5 border border-amber-300 rounded-lg bg-amber-50/50 text-amber-950 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
+                  >
+                    <option value="">⚡ เลือกจากสาขาที่ตั้งค่าไว้...</option>
+                    {settings.branches.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <input
+                  type="text"
+                  value={booking.branch || ''}
+                  onChange={(e) => setBooking({ ...booking, branch: e.target.value })}
+                  placeholder="พิมพ์หรือแก้ไขชื่อสาขาได้อิสระ เช่น สาขาหลัก, สาขาริมหาด..."
+                  className="flex-1 text-xs px-3 py-1.5 border border-amber-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium text-zinc-900"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Booked Rooms Table (Dynamic Rows) */}
+          <div className="space-y-2 border-t border-amber-200/60 pt-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                <span>รายการห้องพักที่จอง (Booked Room Items)</span>
+              </label>
+              <button
+                type="button"
+                onClick={addBookingRoom}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white text-xs font-medium rounded-md transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>เพิ่มแถวห้องพัก</span>
+              </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">หมายเลขห้อง</label>
-              <input
-                type="text"
-                value={booking.roomNumber || ''}
-                onChange={(e) => setBooking({ ...booking, roomNumber: e.target.value })}
-                placeholder="เช่น 101, Villa A"
-                className="w-full text-sm px-3 py-2 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left border-collapse bg-white rounded-lg overflow-hidden border border-amber-200">
+                <thead>
+                  <tr className="bg-amber-100/70 text-amber-900 font-semibold border-b border-amber-200">
+                    <th className="py-2 px-2.5 w-8 text-center">#</th>
+                    <th className="py-2 px-2.5 min-w-[200px]">ประเภทห้องพัก (Room Type)</th>
+                    <th className="py-2 px-2.5 min-w-[180px]">หมายเลขห้อง (Room Number)</th>
+                    <th className="py-2 px-2.5 w-20 text-center">จำนวน (ห้อง)</th>
+                    <th className="py-2 px-2.5 min-w-[140px]">หมายเหตุเพิ่มเติม</th>
+                    <th className="py-2 px-2.5 w-10 text-center"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-amber-100">
+                  {(booking.rooms || []).map((room, rIdx) => {
+                    // Match room preset to get linked numbers
+                    const matchedPreset = settings.presetRoomTypes?.find(
+                      (rt) => rt.name.trim().toLowerCase() === room.roomType.trim().toLowerCase()
+                    );
+                    const linkedNumbers = matchedPreset?.roomNumbers || [];
 
+                    return (
+                      <tr key={room.id || rIdx} className="hover:bg-amber-50/40">
+                        <td className="py-2 px-2.5 text-center text-zinc-400 font-mono">{rIdx + 1}</td>
+                        <td className="py-2 px-2.5">
+                          <div className="space-y-1">
+                            {settings.presetRoomTypes && settings.presetRoomTypes.length > 0 && (
+                              <select
+                                value={
+                                  settings.presetRoomTypes.some((rt) => rt.name === room.roomType)
+                                    ? room.roomType
+                                    : ''
+                                }
+                                onChange={(e) => {
+                                  if (e.target.value) {
+                                    updateBookingRoom(rIdx, 'roomType', e.target.value);
+                                  }
+                                }}
+                                className="w-full text-[11px] text-zinc-600 bg-zinc-50 border border-zinc-200 rounded px-2 py-1 cursor-pointer focus:outline-none"
+                              >
+                                <option value="">⚡ เลือกประเภทห้องพักที่ตั้งค่าไว้...</option>
+                                {settings.presetRoomTypes.map((rt) => (
+                                  <option key={rt.id} value={rt.name}>
+                                    {rt.name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                            <input
+                              type="text"
+                              value={room.roomType}
+                              onChange={(e) => updateBookingRoom(rIdx, 'roomType', e.target.value)}
+                              placeholder="พิมพ์ชื่อประเภทห้องพัก..."
+                              className="w-full text-xs px-2.5 py-1.5 border border-zinc-200 rounded bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium"
+                            />
+                          </div>
+                        </td>
+                        <td className="py-2 px-2.5">
+                          <div className="space-y-1">
+                            {linkedNumbers.length > 0 && (
+                              <div className="flex flex-wrap gap-1 items-center">
+                                <span className="text-[10px] text-amber-800 font-medium">ห้องที่ผูกไว้:</span>
+                                {linkedNumbers.map((num) => (
+                                  <button
+                                    type="button"
+                                    key={num}
+                                    onClick={() => updateBookingRoom(rIdx, 'roomNumber', num)}
+                                    className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                                      room.roomNumber === num
+                                        ? 'bg-amber-600 text-white border-amber-600 font-bold'
+                                        : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                                    }`}
+                                    title="คลิกเพื่อเลือกห้องนี้"
+                                  >
+                                    {num}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            <input
+                              type="text"
+                              value={room.roomNumber}
+                              onChange={(e) => updateBookingRoom(rIdx, 'roomNumber', e.target.value)}
+                              placeholder="เช่น 101, 102 หรือ Villa 1"
+                              className="w-full text-xs px-2.5 py-1.5 border border-zinc-200 rounded bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                            />
+                          </div>
+                        </td>
+                        <td className="py-2 px-2.5">
+                          <input
+                            type="number"
+                            min="1"
+                            value={room.quantity || 1}
+                            onChange={(e) =>
+                              updateBookingRoom(rIdx, 'quantity', parseInt(e.target.value, 10) || 1)
+                            }
+                            className="w-full text-xs text-center font-mono px-2 py-1.5 border border-zinc-200 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                        </td>
+                        <td className="py-2 px-2.5">
+                          <input
+                            type="text"
+                            value={room.note || ''}
+                            onChange={(e) => updateBookingRoom(rIdx, 'note', e.target.value)}
+                            placeholder="เช่น เตียงเดี่ยว, ชั้นบน"
+                            className="w-full text-xs px-2.5 py-1.5 border border-zinc-200 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                        </td>
+                        <td className="py-2 px-2.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removeBookingRoom(rIdx)}
+                            disabled={(booking.rooms || []).length <= 1}
+                            title="ลบแถวห้องพักนี้"
+                            className="p-1 text-zinc-400 hover:text-rose-600 disabled:opacity-30 disabled:hover:text-zinc-400 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-amber-200/60 pt-3">
+
+            {/* Check-in Date */}
             <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">วันเช็คอิน</label>
+              <label className="block text-xs font-semibold text-zinc-700 mb-1">
+                วันเช็คอิน (Check-in) <span className="text-rose-500">*</span>
+              </label>
               <input
                 type="date"
                 value={booking.checkInDate}
-                onChange={(e) => setBooking({ ...booking, checkInDate: e.target.value })}
+                onChange={(e) => {
+                  const newCheckIn = e.target.value;
+                  const currentNights = booking.nights || 1;
+                  let newCheckOut = booking.checkOutDate;
+
+                  // Auto update checkout date based on new check-in + existing nights
+                  if (newCheckIn) {
+                    const inDate = new Date(newCheckIn);
+                    inDate.setDate(inDate.getDate() + currentNights);
+                    newCheckOut = inDate.toISOString().split('T')[0];
+                  }
+
+                  setBooking({
+                    ...booking,
+                    checkInDate: newCheckIn,
+                    checkOutDate: newCheckOut,
+                  });
+                }}
                 className="w-full text-sm px-3 py-2 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
               />
             </div>
 
+            {/* Check-out Date - Auto calculates nights */}
             <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">วันเช็คเอาท์</label>
+              <label className="block text-xs font-semibold text-zinc-700 mb-1">
+                วันเช็คเอาท์ (Check-out) <span className="text-rose-500">*</span>
+              </label>
               <input
                 type="date"
                 value={booking.checkOutDate}
-                onChange={(e) => setBooking({ ...booking, checkOutDate: e.target.value })}
+                min={booking.checkInDate}
+                onChange={(e) => {
+                  const newCheckOut = e.target.value;
+                  let calculatedNights = booking.nights;
+
+                  if (booking.checkInDate && newCheckOut) {
+                    const checkInTime = new Date(booking.checkInDate).getTime();
+                    const checkOutTime = new Date(newCheckOut).getTime();
+                    const diffDays = Math.round((checkOutTime - checkInTime) / (1000 * 60 * 60 * 24));
+                    calculatedNights = diffDays > 0 ? diffDays : 1;
+                  }
+
+                  setBooking({
+                    ...booking,
+                    checkOutDate: newCheckOut,
+                    nights: calculatedNights,
+                  });
+                }}
                 className="w-full text-sm px-3 py-2 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
               />
             </div>
 
+            {/* Total Nights - Auto calculates check-out date */}
             <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">จำนวนคืน</label>
-              <input
-                type="number"
-                min="1"
-                value={booking.nights}
-                onChange={(e) => setBooking({ ...booking, nights: parseInt(e.target.value, 10) || 1 })}
-                className="w-full text-sm px-3 py-2 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
+              <label className="block text-xs font-semibold text-zinc-700 mb-1">
+                จำนวนคืนทั้งหมด (Nights)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="1"
+                  value={booking.nights}
+                  onChange={(e) => {
+                    const parsedNights = parseInt(e.target.value, 10);
+                    const newNights = isNaN(parsedNights) || parsedNights < 1 ? 1 : parsedNights;
+                    let newCheckOut = booking.checkOutDate;
+
+                    if (booking.checkInDate) {
+                      const inDate = new Date(booking.checkInDate);
+                      inDate.setDate(inDate.getDate() + newNights);
+                      newCheckOut = inDate.toISOString().split('T')[0];
+                    }
+
+                    setBooking({
+                      ...booking,
+                      nights: newNights,
+                      checkOutDate: newCheckOut,
+                    });
+                  }}
+                  className="w-full text-sm px-3 py-2 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 font-mono font-semibold"
+                />
+                <span className="absolute right-3 top-2.5 text-xs text-zinc-400 pointer-events-none">
+                  คืน
+                </span>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">ผู้ใหญ่ (ท่าน)</label>
-              <input
-                type="number"
-                min="1"
-                value={booking.adults}
-                onChange={(e) => setBooking({ ...booking, adults: parseInt(e.target.value, 10) || 1 })}
-                className="w-full text-sm px-3 py-2 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            </div>
+            {/* Guests: Adults & Children */}
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">ผู้ใหญ่ (ท่าน)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={booking.adults}
+                  onChange={(e) =>
+                    setBooking({ ...booking, adults: parseInt(e.target.value, 10) || 1 })
+                  }
+                  className="w-full text-sm px-3 py-2 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">เด็ก (ท่าน)</label>
-              <input
-                type="number"
-                min="0"
-                value={booking.children}
-                onChange={(e) => setBooking({ ...booking, children: parseInt(e.target.value, 10) || 0 })}
-                className="w-full text-sm px-3 py-2 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 mb-1">แผนอาหาร</label>
-              <input
-                type="text"
-                value={booking.mealPlan || ''}
-                onChange={(e) => setBooking({ ...booking, mealPlan: e.target.value })}
-                placeholder="เช่น รวมอาหารเช้า 2 ท่าน"
-                className="w-full text-sm px-3 py-2 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
-              />
+              <div className="flex-1">
+                <label className="block text-xs font-semibold text-zinc-700 mb-1">เด็ก (ท่าน)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={booking.children}
+                  onChange={(e) =>
+                    setBooking({ ...booking, children: parseInt(e.target.value, 10) || 0 })
+                  }
+                  className="w-full text-sm px-3 py-2 border border-zinc-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -583,18 +927,38 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({
 
       {/* Items Table */}
       <div className="bg-white p-5 rounded-xl border border-zinc-200/80 shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-100 pb-2 gap-2">
           <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
             รายการสินค้า / ค่าบริการ (Items & Charges)
           </h3>
-          <button
-            type="button"
-            onClick={addItem}
-            className="inline-flex items-center gap-1 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium rounded-md transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>เพิ่มแถวรายการ</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {settings.presetItems && settings.presetItems.length > 0 && (
+              <select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    addPresetItem(e.target.value);
+                  }
+                }}
+                className="text-xs px-2.5 py-1.5 border border-zinc-300 rounded-md bg-white text-zinc-800 hover:bg-zinc-50 font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-zinc-900"
+              >
+                <option value="">⚡ + เพิ่มจากรายการแม่แบบ...</option>
+                {settings.presetItems.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.name} ({formatCurrency(preset.unitPrice)} ฿/{preset.unit})
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              type="button"
+              onClick={addItem}
+              className="inline-flex items-center gap-1 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium rounded-md transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>เพิ่มแถวรายการ</span>
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -602,7 +966,7 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({
             <thead>
               <tr className="border-b border-zinc-200 text-zinc-500 font-semibold bg-zinc-50/50">
                 <th className="py-2 px-2 w-8 text-center">#</th>
-                <th className="py-2 px-2 min-w-[200px]">ชื่อรายการ</th>
+                <th className="py-2 px-2 min-w-[220px]">ชื่อรายการ</th>
                 <th className="py-2 px-2 min-w-[140px]">รายละเอียดเพิ่มเติม (ถ้ามี)</th>
                 <th className="py-2 px-2 w-20 text-center">จำนวน</th>
                 <th className="py-2 px-2 w-20 text-center">หน่วย</th>
@@ -617,13 +981,33 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({
                 <tr key={item.id} className="hover:bg-zinc-50/30">
                   <td className="py-2 px-2 text-center text-zinc-400 font-mono">{index + 1}</td>
                   <td className="py-2 px-2">
-                    <input
-                      type="text"
-                      value={item.name}
-                      onChange={(e) => updateItem(index, 'name', e.target.value)}
-                      placeholder="ชื่อสินค้าหรือบริการ"
-                      className="w-full text-xs px-2 py-1.5 border border-zinc-200 rounded focus:border-zinc-900 focus:outline-none"
-                    />
+                    <div className="space-y-1">
+                      {settings.presetItems && settings.presetItems.length > 0 && (
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              applyPresetToItem(index, e.target.value);
+                            }
+                          }}
+                          className="w-full text-[10px] text-zinc-600 bg-zinc-50/80 border border-zinc-200 rounded px-1.5 py-0.5 cursor-pointer focus:outline-none"
+                        >
+                          <option value="">⚡ โหลดข้อมูลจากแม่แบบ...</option>
+                          {settings.presetItems.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.unitPrice} ฿/{p.unit})
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <input
+                        type="text"
+                        value={item.name}
+                        onChange={(e) => updateItem(index, 'name', e.target.value)}
+                        placeholder="ชื่อสินค้าหรือบริการ"
+                        className="w-full text-xs px-2 py-1.5 border border-zinc-200 rounded focus:border-zinc-900 focus:outline-none font-medium"
+                      />
+                    </div>
                   </td>
                   <td className="py-2 px-2">
                     <input
@@ -638,7 +1022,6 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({
                     <input
                       type="number"
                       step="any"
-                      min="0"
                       value={item.quantity}
                       onChange={(e) => updateItem(index, 'quantity', e.target.value)}
                       className="w-full text-xs text-center font-mono px-2 py-1.5 border border-zinc-200 rounded focus:border-zinc-900 focus:outline-none"
@@ -657,9 +1040,9 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({
                     <input
                       type="number"
                       step="any"
-                      min="0"
                       value={item.unitPrice}
                       onChange={(e) => updateItem(index, 'unitPrice', e.target.value)}
+                      placeholder="0.00 หรือติดลบ"
                       className="w-full text-xs text-right font-mono px-2 py-1.5 border border-zinc-200 rounded focus:border-zinc-900 focus:outline-none"
                     />
                   </td>
@@ -667,14 +1050,13 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({
                     <input
                       type="number"
                       step="any"
-                      min="0"
                       value={item.discount}
                       onChange={(e) => updateItem(index, 'discount', e.target.value)}
                       placeholder="0"
                       className="w-full text-xs text-right font-mono px-2 py-1.5 border border-zinc-200 rounded focus:border-zinc-900 focus:outline-none"
                     />
                   </td>
-                  <td className="py-2 px-2 text-right font-mono font-semibold text-zinc-900">
+                  <td className={`py-2 px-2 text-right font-mono font-semibold ${item.amount < 0 ? 'text-rose-600' : 'text-zinc-900'}`}>
                     {formatCurrency(item.amount)}
                   </td>
                   <td className="py-2 px-2 text-center">
@@ -813,10 +1195,46 @@ export const DocumentEditor: React.FC<DocumentEditorProps> = ({
                 <label className="block text-[11px] font-medium text-zinc-600 mb-1">
                   ยอดคงเหลือค้างชำระ
                 </label>
-                <div className="w-full text-xs font-mono font-semibold px-3 py-1.5 bg-zinc-100 rounded text-zinc-800 border border-zinc-200">
+                <div className={`w-full text-xs font-mono font-semibold px-3 py-1.5 bg-zinc-100 rounded border border-zinc-200 ${remainingAmount < 0 ? 'text-rose-600' : 'text-zinc-800'}`}>
                   {formatCurrency(remainingAmount)} บาท
                 </div>
               </div>
+            </div>
+
+            {/* Signature Toggle Option */}
+            <div className="pt-3 border-t border-zinc-100 space-y-2">
+              <label className="flex items-center justify-between p-2.5 rounded-lg border border-zinc-200 bg-zinc-50/60 hover:bg-zinc-50 cursor-pointer transition-colors">
+                <div className="space-y-0.5">
+                  <span className="font-semibold text-zinc-800 text-xs block">
+                    แสดงลายเซ็นผู้มีอำนาจลงนาม
+                  </span>
+                  <span className="text-[11px] text-zinc-500 block">
+                    {settings.signatureImageUrl
+                      ? 'ใส่ภาพลายเซ็นดิจิทัลที่ตั้งค่าไว้ลงในเอกสาร'
+                      : 'แสดงชื่อผู้มีอำนาจลงนามในเอกสาร (สามารถอัปโหลดภาพลายเซ็นได้ที่เมนูตั้งค่า)'}
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={showSignature}
+                  onChange={(e) => setShowSignature(e.target.checked)}
+                  className="w-4 h-4 rounded text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+                />
+              </label>
+
+              {showSignature && (
+                <div className="flex items-center justify-between p-2.5 rounded-lg border border-zinc-200/90 bg-white">
+                  <label className="text-xs font-semibold text-zinc-700 whitespace-nowrap">
+                    วันที่เซ็นเอกสาร (Signature Date):
+                  </label>
+                  <input
+                    type="date"
+                    value={signatureDate}
+                    onChange={(e) => setSignatureDate(e.target.value)}
+                    className="text-xs px-2.5 py-1.5 border border-zinc-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 font-medium text-zinc-800"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

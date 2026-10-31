@@ -51,8 +51,7 @@ export function formatThaiBahtText(amount: number | string): string {
   const fixed = absNum.toFixed(2);
   const [bahtStr, satangStr] = fixed.split('.');
 
-  let text = '';
-  if (isNegative) text += 'ลบ';
+  let text = isNegative ? 'ลบ' : '';
 
   if (parseInt(bahtStr, 10) === 0) {
     text += '';

@@ -11,9 +11,34 @@ export interface DocItem {
   amount: number;
 }
 
-export interface BookingDetails {
+export interface PresetItem {
+  id: string;
+  name: string;
+  description?: string;
+  unit: string;
+  unitPrice: number;
+}
+
+export interface RoomTypePreset {
+  id: string;
+  name: string;
+  roomNumbers: string[]; // List of room numbers linked to this room type
+  defaultPrice?: number;
+}
+
+export interface BookingRoomItem {
+  id: string;
   roomType: string;
-  roomNumber?: string;
+  roomNumber: string;
+  quantity?: number;
+  note?: string;
+}
+
+export interface BookingDetails {
+  branch?: string; // สาขาของที่พัก/โรงแรม
+  roomType?: string; // Legacy fallback
+  roomNumber?: string; // Legacy fallback
+  rooms: BookingRoomItem[]; // แถวรายการห้องพัก (รองรับหลายแถว)
   checkInDate: string;
   checkInTime?: string;
   checkOutDate: string;
@@ -21,7 +46,6 @@ export interface BookingDetails {
   nights: number;
   adults: number;
   children: number;
-  mealPlan?: string;
 }
 
 export interface CustomerInfo {
@@ -57,6 +81,8 @@ export interface DocumentData {
   notes: string;
   paymentTerms: string;
   status: DocStatus;
+  showSignature?: boolean;
+  signatureDate?: string; // วันที่เซ็นเอกสาร (เลือกได้)
   driveFileId?: string;
   driveFileUrl?: string;
   createdAt: string;
@@ -80,6 +106,10 @@ export interface CompanySettings {
   defaultTerms: Record<DocType, string>;
   signatureName: string;
   signatureTitle: string;
+  signatureImageUrl?: string;
+  presetItems: PresetItem[]; // รายการสินค้า/บริการที่ตั้งค่าไว้ล่วงหน้า
+  presetRoomTypes: RoomTypePreset[]; // ประเภทห้องพักและหมายเลขห้องที่ตั้งค่าไว้ล่วงหน้า
+  branches: string[]; // รายชื่อสาขาของโรงแรม/กิจการ
   googleSpreadsheetId?: string;
   googleDriveFolderId?: string;
 }

@@ -246,8 +246,18 @@ export default function App() {
       booking:
         docType === 'CF'
           ? {
-              roomType: 'Deluxe Room',
-              roomNumber: '101',
+              branch: settings.branches?.[0] || 'สาขาใหญ่ (สำนักงานใหญ่)',
+              roomType: settings.presetRoomTypes?.[0]?.name || 'Deluxe Room',
+              roomNumber: settings.presetRoomTypes?.[0]?.roomNumbers?.[0] || '101',
+              rooms: [
+                {
+                  id: 'room-1',
+                  roomType: settings.presetRoomTypes?.[0]?.name || 'Deluxe Room',
+                  roomNumber: settings.presetRoomTypes?.[0]?.roomNumbers?.[0] || '101',
+                  quantity: 1,
+                  note: '',
+                },
+              ],
               checkInDate: new Date().toISOString().split('T')[0],
               checkInTime: '14:00 น.',
               checkOutDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
@@ -255,7 +265,6 @@ export default function App() {
               nights: 1,
               adults: 2,
               children: 0,
-              mealPlan: 'รวมอาหารเช้า (Breakfast Included)',
             }
           : undefined,
       items: [
@@ -283,6 +292,8 @@ export default function App() {
       notes: settings.defaultNotes[docType] || '',
       paymentTerms: settings.defaultTerms[docType] || '',
       status: docType === 'RC' ? 'paid' : 'issued',
+      showSignature: true,
+      signatureDate: new Date().toISOString().split('T')[0],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
